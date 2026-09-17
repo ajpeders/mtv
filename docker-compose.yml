@@ -1,0 +1,80 @@
+services:
+  mtv:
+    container_name: mtv
+    security_opt:
+      - no-new-privileges:true
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    volumes:
+      - ./app:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../../state/mtv:/config:ro
+      - ${MTV_VIDEOS_PATH:-/mnt/storage/mtv-videos}:/usr/share/nginx/html/videos:ro
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.routers.mtv.rule=Host(`${MTV_DOMAIN}`)
+      - traefik.http.routers.mtv.entrypoints=websecure
+      - traefik.http.routers.mtv.tls=true
+      - traefik.http.routers.mtv.tls.certresolver=letsencrypt
+      - traefik.http.services.mtv.loadbalancer.server.port=80
+    networks:
+      - web
+
+  # Mirrors every channel's YouTube playlist (state/mtv/channels.json, seeded
+  # from app/channels.default.json) into $MTV_VIDEOS_PATH (see sync.sh). The
+  # player streams these local files and only falls back to YouTube embeds
+  # until the first sync completes. Lives on /mnt/storage (not state/) —
+  # multi-GB, fully re-downloadable, deliberately outside the backup set.
+  mtv-sync:
+    container_name: mtv-sync
+    security_opt:
+      - no-new-privileges:true
+    image: jauderho/yt-dlp:latest
+    restart: unless-stopped
+    mem_limit: 512m
+    entrypoint: ["/bin/sh", "/sync.sh"]
+    environment:
+      SYNC_INTERVAL: ${MTV_SYNC_INTERVAL:-6h}
+    volumes:
+      - ./sync.sh:/sync.sh:ro
+      - ./app:/app:ro
+      - ../../state/mtv:/config
+      - ${MTV_VIDEOS_PATH:-/mnt/storage/mtv-videos}:/videos
+    networks:
+      - web
+
+  # Lineup editor + sync status + now-playing at /admin. The player route is
+  # deliberately PUBLIC (Private Relay), so the admin router gets local-only;
+  # Traefik picks this router over the plain Host() one for /admin requests
+  # because its rule is longer (default priority = rule length).
+  mtv-admin:
+    container_name: mtv-admin
+    security_opt:
+      - no-new-privileges:true
+    build: ./admin
+    restart: unless-stopped
+    mem_limit: 128m
+    volumes:
+      - ../../state/mtv:/config
+      - ${MTV_VIDEOS_PATH:-/mnt/storage/mtv-videos}:/videos:ro
+      # viewers panel reads Traefik's access log — the only place real client
+      # IPs exist for a public route (nginx in the player only sees Traefik)
+      - ../../state/traefik/logs:/traefik-logs:ro
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.routers.mtv-admin.rule=Host(`${MTV_DOMAIN}`) && PathPrefix(`/admin`)
+      - traefik.http.routers.mtv-admin.entrypoints=websecure
+      - traefik.http.routers.mtv-admin.tls=true
+      - traefik.http.routers.mtv-admin.tls.certresolver=letsencrypt
+      - traefik.http.routers.mtv-admin.middlewares=local-only@file
+      - traefik.http.services.mtv-admin.loadbalancer.server.port=8000
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
+    name: web

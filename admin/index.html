@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MTV ADMIN — thelunadog</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root { --phosphor: #33ff66; --phosphor-dim: rgba(51,255,102,.55); --tube-black: #050605; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { min-height: 100%; background: var(--tube-black); font-family: "VT323", monospace; color: var(--phosphor); }
+  body { padding: 4vh 5vw 8vh; text-shadow: 0 0 6px var(--phosphor-dim); }
+  body::after { content: ""; position: fixed; inset: 0; pointer-events: none; background: repeating-linear-gradient(to bottom, transparent 0px, transparent 2px, rgba(0,0,0,.22) 3px, transparent 4px); mix-blend-mode: multiply; }
+  h1 { font-size: clamp(36px,6vmin,72px); letter-spacing: .06em; margin-bottom: 4vh; }
+  h1 small { font-size: .45em; color: var(--phosphor-dim); }
+  section { border: 2px solid var(--phosphor-dim); border-radius: 4px; padding: 2vh 2vw; margin-bottom: 4vh; background: rgba(0,0,0,.55); }
+  h2 { font-size: clamp(24px,3.4vmin,36px); letter-spacing: .08em; margin-bottom: 1.5vh; }
+  h2 small { font-size: .5em; color: var(--phosphor-dim); letter-spacing: .04em; }
+  tr.off td { color: var(--phosphor-dim); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: clamp(18px,2.4vmin,26px); }
+  th, td { text-align: left; padding: 4px 10px; }
+  th { color: var(--phosphor-dim); text-transform: uppercase; font-weight: normal; }
+  td.r, th.r { text-align: right; }
+  input { font-family: inherit; font-size: inherit; color: var(--phosphor); background: transparent; border: 1px solid rgba(51,255,102,.3); border-radius: 2px; padding: 2px 6px; width: 100%; text-shadow: inherit; }
+  input:focus { outline: none; border-color: var(--phosphor); }
+  input.num { width: 4em; }
+  input.name { width: 100%; min-width: 8em; text-transform: uppercase; }
+  input.playlist { width: 100%; min-width: 16em; }
+  button { font-family: inherit; font-size: clamp(18px,2.6vmin,28px); color: var(--phosphor); background: rgba(0,0,0,.55); border: 2px solid var(--phosphor-dim); border-radius: 4px; padding: 4px 16px; cursor: pointer; text-shadow: 0 0 8px var(--phosphor-dim); text-transform: uppercase; }
+  button:active { background: rgba(51,255,102,.25); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.rm { border-width: 1px; padding: 0 10px; }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--phosphor); outline-offset: 3px; }
+  .row { margin-top: 1.5vh; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .msg { font-size: clamp(18px,2.4vmin,26px); }
+  .msg.err { color: #ff5544; text-shadow: 0 0 6px rgba(255,85,68,.55); }
+  .stat { font-size: clamp(20px,2.8vmin,30px); }
+  .stat .dim { color: var(--phosphor-dim); }
+  #onair div { font-size: clamp(20px,2.6vmin,28px); line-height: 1.6; }
+  #onair .off { color: var(--phosphor-dim); }
+  #onair .monitor-channel::after { content: " — "; }
+  a { color: var(--phosphor); }
+  @keyframes blink { 50% { opacity: .15; } }
+  .blink { animation: blink 1.1s steps(1) infinite; }
+  @media (prefers-reduced-motion: reduce) { .blink { animation: none; } }
+</style>
+</head>
+<body>
+<h1>MTV ADMIN <small>MASTER CONTROL</small></h1>
+<section id="lineup-sec">
+  <h2>CHANNEL LINEUP</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>CH</th><th>NAME</th><th>PLAYLIST ID</th><th class="r">LOCAL</th><th class="r">HOURS</th><th></th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  <div class="row"><button id="add">+ CHANNEL</button><button id="save">SAVE</button><span class="msg" id="save-msg" role="status"></span></div>
+</section>
+<section>
+  <h2>SYNC</h2>
+  <div class="stat" id="lib">LOADING…</div>
+  <div class="row"><button id="sync">SYNC NOW</button><span class="msg" id="sync-msg" role="status"></span></div>
+</section>
+<section>
+  <h2>NOW PLAYING</h2>
+  <div id="onair">LOADING…</div>
+  <div class="row"><a href="/#remote">OPEN REMOTE →</a></div>
+</section>
+<section>
+  <h2>VIEWERS <small>— PAGE LOADS SINCE LAST LOG ROTATION (DAILY)</small></h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>WHERE</th><th>IP</th><th>STATUS</th><th class="r">HITS</th><th>FIRST</th><th>LAST</th></tr></thead>
+    <tbody id="viewer-rows"></tbody>
+  </table></div>
+  <div class="stat" id="viewers-msg"></div>
+</section>
+    <!-- static row template; all dynamic values go in via .value/.textContent -->
+    <template id="row-tpl">
+      <tr>
+        <td data-label="CH">
+          <input class="num" inputmode="numeric" aria-label="Channel number" />
+        </td>
+        <td data-label="CHANNEL NAME">
+          <input
+            class="name"
+            maxlength="24"
+            aria-label="Channel name"
+            placeholder="Name your channel"
+          />
+        </td>
+        <td data-label="YOUTUBE PLAYLIST ID">
+          <input
+            class="playlist"
+            spellcheck="false"
+            aria-label="YouTube playlist ID"
+            placeholder="PL…"
+          />
+        </td>
+        <td data-label="VIDEOS" class="r local">—</td>
+        <td data-label="HOURS" class="r hours">—</td>
+        <td><button class="rm" aria-label="Remove channel">×</button></td>
+      </tr>
+    </template>
+
+    <script>
+      (function () {
+        "use strict";
+        var $ = function (id) {
+          return document.getElementById(id);
+        };
+        var statusByNum = {}; // num -> {local_count, total_duration_s}
+
+        // ---- lineup editor ----
+        function makeRow(ch) {
+          var tr = $("row-tpl").content.firstElementChild.cloneNode(true);
+          tr.querySelector(".num").value = ch.num != null ? ch.num : "";
+          tr.querySelector(".name").value = ch.name || "";
+          tr.querySelector(".playlist").value = ch.playlist || "";
+          tr.querySelector(".rm").addEventListener("click", function () {
+            tr.remove();
+          });
+          paintCounts(tr);
+          return tr;
+        }
+        function paintCounts(tr) {
+          var c = statusByNum[parseInt(tr.querySelector(".num").value, 10)];
+          tr.querySelector(".local").textContent = c ? c.local_count : "—";
+          tr.querySelector(".hours").textContent = c
+            ? (c.total_duration_s / 3600).toFixed(1)
+            : "—";
+        }
+        function readRows() {
+          return Array.prototype.map.call($("rows").children, function (tr) {
+            var num = tr.querySelector(".num").value.trim();
+            return {
+              // send what the server can validate; non-numeric num goes as-is → 422
+              num: /^\d+$/.test(num) ? parseInt(num, 10) : num,
+              name: tr.querySelector(".name").value,
+              playlist: tr.querySelector(".playlist").value.trim(),
+            };
+          });
+        }
+        function loadLineup() {
+          fetch("/admin/api/lineup")
+            .then(function (r) {
+              if (r.status === 404)
+                return r.json().then(function (e) {
+                  msg(
+                    "save-msg",
+                    (e.detail || "no lineup") + " — starting empty",
+                    true,
+                  );
+                  return [];
+                });
+              return r.json();
+            })
+            .then(function (lineup) {
+              $("rows").textContent = "";
+              (lineup || []).forEach(function (ch) {
+                $("rows").appendChild(makeRow(ch));
+              });
+            })
+            .catch(function () {
+              msg(
+                "save-msg",
+                "Could not load the lineup. Reload to try again.",
+                true,
+              );
+              $("save").disabled = true;
+            });
+        }
+        function msg(id, text, err) {
+          var el = $(id);
+          el.textContent = text;
+          el.className = "msg" + (err ? " err" : "");
+        }
+        $("add").addEventListener("click", function () {
+          var used = readRows().map(function (c) {
+            return c.num;
+          });
+          var n = 1;
+          while (used.indexOf(n) !== -1) n++;
+          var tr = makeRow({ num: n, name: "", playlist: "" });
+          $("rows").appendChild(tr);
+          tr.querySelector(".name").focus();
+        });
+        $("save").addEventListener("click", function () {
+          msg("save-msg", "SAVING…");
+          fetch("/admin/api/lineup", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(readRows()),
+          })
+            .then(function (r) {
+              return r.json().then(function (b) {
+                return { ok: r.ok, b: b };
+              });
+            })
+            .then(function (res) {
+              if (res.ok) {
+                msg("save-msg", "SAVED ✔");
+                refreshStatus();
+                refreshOnAir();
+              } else msg("save-msg", res.b.detail || "SAVE FAILED", true);
+            })
+            .catch(function () {
+              msg("save-msg", "SAVE FAILED — NETWORK", true);
+            });
+        });
+
+        // ---- sync panel ----
+        function fmtBytes(n) {
+          var u = ["B", "KB", "MB", "GB", "TB"],
+            i = 0;
+          while (n >= 1024 && i < u.length - 1) {
+            n /= 1024;
+            i++;
+          }
+          return n.toFixed(i ? 1 : 0) + " " + u[i];
+        }
+        function fmtAgo(s) {
+          if (s == null) return "NEVER SYNCED";
+          if (s < 60) return "SYNCED " + Math.floor(s) + "S AGO";
+          if (s < 3600) return "SYNCED " + Math.floor(s / 60) + "M AGO";
+          if (s < 86400) return "SYNCED " + Math.floor(s / 3600) + "H AGO";
+          return "SYNCED " + Math.floor(s / 86400) + "D AGO";
+        }
+        function libLine(lib) {
+          var el = $("lib");
+          el.textContent = "";
+          [
+            [String(lib.video_count || 0), false],
+            [" VIDEOS · ", true],
+            [fmtBytes(lib.disk_bytes || 0), false],
+            [" ON DISK · ", true],
+            [fmtAgo(lib.manifest_age_s), true],
+          ].forEach(function (part) {
+            var s = document.createElement("span");
+            if (part[1]) s.className = "dim";
+            s.textContent = part[0];
+            el.appendChild(s);
+          });
+        }
+        function refreshStatus() {
+          fetch("/admin/api/status")
+            .then(function (r) {
+              return r.json();
+            })
+            .then(function (st) {
+              statusByNum = {};
+              (st.channels || []).forEach(function (c) {
+                statusByNum[c.num] = c;
+              });
+              // repaint counts in place — don't clobber unsaved edits in the inputs
+              Array.prototype.forEach.call($("rows").children, paintCounts);
+              libLine(st.library || {});
+              var btn = $("sync");
+              btn.disabled = !!st.sync_pending;
+              btn.textContent = st.sync_pending ? "PENDING" : "SYNC NOW";
+              btn.classList.toggle("blink", !!st.sync_pending);
+            })
+            .catch(function () {
+              $("lib").textContent =
+                "Could not connect to the library. Retrying shortly.";
+            });
+        }
+        $("sync").addEventListener("click", function () {
+          fetch("/admin/api/sync", { method: "POST" })
+            .then(function (r) {
+              if (!r.ok) throw new Error("Sync failed");
+              msg("sync-msg", "Sync requested. Fresh music is on the way.");
+              refreshStatus();
+            })
+            .catch(function () {
+              msg("sync-msg", "REQUEST FAILED", true);
+            });
+        });
+
+        // ---- now playing: EXACT copy of the player's schedule math (mtv.js) ----
+        var EPOCH = 365472000; // 1981-08-01, MTV sign-on
+        var SEED = 1981;
+        function mulberry32(a) {
+          return function () {
+            a |= 0;
+            a = (a + 0x6d2b79f5) | 0;
+            var t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+        function scheduleFor(manifest, ch) {
+          var vids = manifest.videos || manifest;
+          var chans = manifest.channels || null;
+          var ids = chans && chans[String(ch.num)];
+          var items = vids.filter(function (it) {
+            return it.duration > 0 && (!ids || ids.indexOf(it.id) !== -1);
+          });
+          items.sort(function (a, b) {
+            return a.id < b.id ? -1 : 1;
+          });
+          var rnd = mulberry32(SEED + ch.num);
+          for (var i = items.length - 1; i > 0; i--) {
+            var j = Math.floor(rnd() * (i + 1));
+            var t = items[i];
+            items[i] = items[j];
+            items[j] = t;
+          }
+          return items;
+        }
+        function onAir(lib) {
+          var total = lib.reduce(function (s, it) {
+            return s + it.duration;
+          }, 0);
+          if (!total) return null;
+          var off = (Date.now() / 1000 - EPOCH) % total;
+          for (var i = 0; i < lib.length; i++) {
+            if (off < lib[i].duration) return { it: lib[i], off: off };
+            off -= lib[i].duration;
+          }
+          return { it: lib[0], off: 0 };
+        }
+        function fmtOff(s) {
+          var m = Math.floor(s / 60),
+            sec = Math.floor(s % 60);
+          return "  " + m + ":" + ("0" + sec).slice(-2) + " IN";
+        }
+        function refreshOnAir() {
+          Promise.all([
+            fetch("/admin/api/lineup")
+              .then(function (r) {
+                return r.ok ? r.json() : [];
+              })
+              .catch(function () {
+                return [];
+              }),
+            fetch("/videos/manifest.json", { cache: "no-store" })
+              .then(function (r) {
+                return r.ok ? r.json() : null;
+              })
+              .catch(function () {
+                return null;
+              }),
+          ]).then(function (rs) {
+            var lineup = rs[0] || [],
+              manifest = rs[1];
+            var el = $("onair");
+            if (!manifest) {
+              el.textContent = "NO MANIFEST YET — NOTHING SYNCED";
+              return;
+            }
+            el.textContent = "";
+            lineup.forEach(function (ch) {
+              var d = document.createElement("div");
+              var label = "CH " + String(ch.num).padStart(2, "0");
+              var slot = onAir(scheduleFor(manifest, ch));
+              var channel = document.createElement("span");
+              channel.className = "monitor-channel";
+              channel.textContent = label;
+              d.appendChild(channel);
+              if (slot) {
+                var title = document.createElement("span");
+                title.className = "monitor-track";
+                title.textContent = slot.it.title;
+                d.appendChild(title);
+                var o = document.createElement("span");
+                o.className = "off";
+                o.textContent = fmtOff(slot.off);
+                d.appendChild(o);
+              } else {
+                var off = document.createElement("span");
+                off.textContent = "Off air · waiting for videos";
+                d.appendChild(off);
+                d.className = "off";
+              }
+              el.appendChild(d);
+            });
+            if (!lineup.length) el.textContent = "NO CHANNELS CONFIGURED";
+          });
+        }
+
+        // ---- viewers panel ----
+        function refreshViewers() {
+          fetch("/admin/api/viewers")
+            .then(function (r) {
+              return r.json().then(function (b) {
+                return { ok: r.ok, b: b };
+              });
+            })
+            .then(function (res) {
+              var body = $("viewer-rows");
+              var note = $("viewers-msg");
+              if (!res.ok) {
+                note.textContent = res.b.detail || "VIEWERS UNAVAILABLE";
+                return;
+              }
+              var vs = res.b.viewers || [];
+              body.textContent = "";
+              note.textContent = vs.length ? "" : "NO PAGE LOADS YET TODAY";
+              vs.forEach(function (v) {
+                var tr = document.createElement("tr");
+                [
+                  v.where,
+                  v.ip,
+                  v.watched ? "WATCHED" : "BLOCKED (" + v.status + ")",
+                  String(v.hits),
+                  (v.first || "").replace("T", " "),
+                  (v.last || "").replace("T", " "),
+                ].forEach(function (text, i) {
+                  var td = document.createElement("td");
+                  if (i === 3) td.className = "r";
+                  td.textContent = text;
+                  tr.appendChild(td);
+                });
+                if (!v.watched) tr.className = "off";
+                body.appendChild(tr);
+              });
+            })
+            .catch(function () {
+              $("viewers-msg").textContent = "COULD NOT LOAD VIEWERS";
+            });
+        }
+
+        loadLineup();
+        refreshStatus();
+        refreshOnAir();
+        refreshViewers();
+        setInterval(refreshStatus, 30000);
+        setInterval(refreshOnAir, 60000);
+        setInterval(refreshViewers, 60000);
+      })();
+    </script>
+  </body>
+</html>

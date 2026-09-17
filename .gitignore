@@ -1,0 +1,4 @@
+.env
+app/videos/*
+!app/videos/.gitkeep
+__pycache__/

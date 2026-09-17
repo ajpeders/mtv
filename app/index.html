@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MTV — thelunadog</title>
+<meta name="theme-color" content="#050605">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Permanent+Marker&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --phosphor: #33ff66;
+    --phosphor-dim: rgba(51, 255, 102, 0.55);
+    --tube-black: #050605;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: var(--tube-black);
+    overflow: hidden;
+    font-family: "VT323", monospace;
+    color: var(--phosphor);
+    cursor: default;
+  }
+
+  /* ---- the tube ---- */
+  #tube { position: fixed; inset: 0; background: #000; }
+  /* Oversize the iframe so YouTube's own chrome — the bottom-right logo
+     watermark, the title bar that flashes on load — is cropped off-screen,
+     like overscan on a real set. ~6% shaved per edge. */
+  #player {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 100vw; height: 56.25vw;      /* 16:9 */
+    min-height: 100vh; min-width: 177.78vh;
+    transform: translate(-50%, -50%) scale(1.12);
+    border: 0;
+  }
+  video#player { object-fit: cover; background: #000; }
+  /* broadcast double-buffer: two stacked screens, hidden one preloads the
+     next video, swap at the boundary for a gapless transition */
+  .screen {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 100vw; height: 56.25vw;
+    min-height: 100vh; min-width: 177.78vh;
+    transform: translate(-50%, -50%) scale(1.12);
+    border: 0;
+    object-fit: cover;
+    background: #000;
+    opacity: 0;
+  }
+  .screen.on { opacity: 1; }
+
+  /* ---- CRT layers (all above the iframe, click-catcher on top) ---- */
+  .layer { position: fixed; inset: 0; pointer-events: none; }
+
+  #scanlines {
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0.22) 3px,
+      rgba(0, 0, 0, 0) 4px
+    );
+    mix-blend-mode: multiply;
+  }
+  #vignette {
+    background: radial-gradient(ellipse at center,
+      rgba(0,0,0,0) 55%, rgba(0,0,0,0.28) 82%, rgba(0,0,0,0.72) 100%);
+  }
+  /* faint rolling brightness band, like a tired tube */
+  #hum {
+    background: linear-gradient(to bottom,
+      rgba(255,255,255,0) 0%, rgba(255,255,255,0.035) 50%, rgba(255,255,255,0) 100%);
+    background-size: 100% 30vh;
+    background-repeat: no-repeat;
+    animation: hum-roll 9s linear infinite;
+    mix-blend-mode: screen;
+  }
+  @keyframes hum-roll {
+    from { background-position: 0 -30vh; }
+    to   { background-position: 0 130vh; }
+  }
+
+  /* ---- static burst on channel flip ---- */
+  #static {
+    opacity: 0;
+    background:
+      repeating-radial-gradient(circle at 17% 32%, #fff 0 0.5px, transparent 1px 2px),
+      repeating-conic-gradient(from 0.3turn, #9a9a9a 0 1deg, #1c1c1c 1deg 2deg);
+    background-blend-mode: difference;
+    filter: contrast(1.6) brightness(1.15);
+  }
+  #static.on { opacity: 1; animation: static-jitter 90ms steps(2) infinite; }
+  @keyframes static-jitter {
+    0%   { background-position: 0 0, 0 0; }
+    50%  { background-position: 13px 37px, -21px 8px; }
+    100% { background-position: -29px -11px, 17px -33px; }
+  }
+
+  /* TV channel display and the quiet, on-air song credits. */
+  .osd {
+    position: fixed;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .65s ease;
+  }
+  .osd.show { opacity: 1; }
+  #osd-ch {
+    top: max(5vh, env(safe-area-inset-top));
+    left: 5vw;
+    max-width: 65vw;
+    font-size: clamp(25px, 4.3vmin, 54px);
+    line-height: 1;
+    text-transform: uppercase;
+    text-shadow: 0 0 8px var(--phosphor-dim), 2px 2px 0 #000;
+  }
+  #osd-track {
+    left: max(6vw, env(safe-area-inset-left));
+    bottom: max(8vh, calc(env(safe-area-inset-bottom) + 20px));
+    max-width: min(70vw, 850px);
+    color: #f5f5ed;
+    font-family: Arial, Helvetica, sans-serif;
+    line-height: 1.18;
+    text-shadow: 2px 2px 0 #111, 0 2px 8px #000b;
+  }
+  #osd-track::before {
+    content: "";
+    display: block;
+    width: clamp(28px, 4vw, 52px);
+    height: 4px;
+    margin-bottom: 13px;
+    background: #f3f3e8;
+    box-shadow: 5px 0 #ef4981, -3px 0 #66ddd2, 1px 2px #111;
+  }
+  #osd-track.show { animation: credit-lock .24s steps(2) both; }
+  @keyframes credit-lock {
+    0% { transform: translateX(-3px); filter: drop-shadow(2px 0 #ef498180); }
+    55% { transform: translateX(1px); }
+    100% { transform: none; filter: none; }
+  }
+  #track-artist {
+    display: block;
+    font-family: "Archivo Black", "Arial Black", Arial, sans-serif;
+    font-size: clamp(22px, 3.8vmin, 47px);
+    font-weight: 900;
+    letter-spacing: -.035em;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+  }
+  #track-song {
+    display: block;
+    margin-top: 5px;
+    font-size: clamp(18px, 2.9vmin, 36px);
+    font-weight: 700;
+    letter-spacing: -.02em;
+    overflow-wrap: anywhere;
+  }
+  #osd-mute {
+    top: max(5vh, env(safe-area-inset-top));
+    right: 5vw;
+    max-width: 25vw;
+    text-align: right;
+    font-size: clamp(15px, 2vmin, 24px);
+    line-height: 1.05;
+    color: #f5f5edb3;
+    text-shadow: 1px 2px 2px #000;
+  }
+
+  /* A station bug, not a control: the picture stays the entire interface. */
+  #station-bug {
+    position: fixed;
+    right: max(5vw, env(safe-area-inset-right));
+    bottom: max(7.5vh, calc(env(safe-area-inset-bottom) + 18px));
+    width: clamp(57px, 8vmin, 100px);
+    color: #f4f4e8;
+    pointer-events: none;
+    opacity: .74;
+    filter: drop-shadow(2px 2px 0 #000a);
+    transform: rotate(-4deg);
+  }
+  .station-m {
+    display: block;
+    font-family: "Archivo Black", "Arial Black", sans-serif;
+    font-size: clamp(59px, 8.5vmin, 106px);
+    line-height: .86;
+    letter-spacing: -.14em;
+    transform: scaleX(1.06);
+    transform-origin: left;
+  }
+  .station-tv {
+    position: absolute;
+    right: -.18em;
+    top: .68em;
+    font-family: "Permanent Marker", cursive;
+    font-size: clamp(26px, 3.9vmin, 48px);
+    line-height: 1;
+    letter-spacing: -.12em;
+    color: #101010;
+    -webkit-text-stroke: 1px #f4f4e8;
+    transform: rotate(13deg);
+  }
+  .station-caption {
+    display: block;
+    margin-top: 6px;
+    font-family: Arial, sans-serif;
+    font-size: clamp(5px, .73vmin, 9px);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -.02em;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  /* The remote appears only on a tap and disappears after four seconds. */
+  #catcher {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    background: transparent; border: 0;
+    cursor: default;
+  }
+  #catcher:focus-visible { outline: 1px solid var(--phosphor-dim); outline-offset: -8px; }
+  #pads {
+    position: fixed;
+    top: max(16vh, calc(env(safe-area-inset-top) + 64px));
+    right: 5vw;
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px;
+    max-width: 90vw;
+    padding: 3px;
+    background: #0009;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .4s ease;
+  }
+  #pads.show { opacity: 1; pointer-events: auto; }
+  #pads button {
+    font-family: "VT323", monospace;
+    font-size: clamp(18px, 2.4vmin, 28px);
+    min-height: 44px;
+    color: #f5f5ed;
+    background: transparent;
+    border: 0;
+    padding: 6px 10px;
+    cursor: pointer;
+    text-shadow: 1px 2px #000;
+  }
+  #pads button:hover, #pads button:active { color: var(--phosphor); background: #ffffff12; }
+  #pads button:focus-visible { outline: 1px solid var(--phosphor); outline-offset: -2px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 600px) {
+    #osd-track { left: 6vw; bottom: max(9vh, calc(env(safe-area-inset-bottom) + 20px)); max-width: 71vw; }
+    #osd-track::before { height: 3px; margin-bottom: 9px; }
+    #osd-mute { font-size: 15px; }
+    #pads button { padding-inline: 9px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #hum { animation: none; }
+    #static.on { animation: none; opacity: .25; }
+    .osd, #pads { transition: none; }
+    #osd-track.show { animation: none; }
+  }
+
+  #boot {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--tube-black);
+    font-size: clamp(30px, 5vmin, 64px);
+    text-shadow: 0 0 10px var(--phosphor-dim);
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+  <div id="tube"><div id="player"></div></div>
+
+  <div class="layer" id="static"></div>
+  <div class="layer" id="scanlines"></div>
+  <div class="layer" id="hum"></div>
+  <div class="layer" id="vignette"></div>
+
+  <div class="osd" id="osd-ch"></div>
+  <div class="osd" id="osd-track" role="status" aria-live="polite" aria-atomic="true"><span id="track-artist"></span><span id="track-song"></span></div>
+  <div class="osd" id="osd-mute">MUTED<br>TAP FOR SOUND</div>
+
+  <div id="station-bug" aria-label="MTV Music Television"><span class="station-m" aria-hidden="true">M</span><span class="station-tv" aria-hidden="true">TV</span><span class="station-caption" aria-hidden="true">MUSIC TELEVISION</span></div>
+
+  <button id="catcher" aria-label="Turn on sound and show TV controls"></button>
+  <div id="pads" aria-label="TV controls" aria-hidden="true" inert>
+    <button id="pad-chup" hidden aria-label="channel up">CH ▲</button>
+    <button id="pad-chdn" hidden aria-label="channel down">CH ▼</button>
+    <button id="pad-skip" aria-label="skip video">SKIP</button>
+    <button id="pad-full" aria-label="fullscreen">FULL</button>
+    <button id="pad-pip" hidden aria-label="picture in picture">PIP</button>
+    <button id="pad-cast" hidden aria-label="airplay">CAST</button>
+  </div>
+
+  <div id="boot">TUNING…</div>
+
+  <script src="mtv.js?v=8"></script>
+</body>
+</html>

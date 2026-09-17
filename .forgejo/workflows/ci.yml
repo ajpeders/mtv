@@ -1,0 +1,29 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sanity-check player, sync script and admin app
+        run: |
+          test -f app/index.html
+          test -f app/channels.default.json
+          test -f nginx.conf
+          node --check app/mtv.js
+          sh -n sync.sh
+          python3 -c "
+          import json
+          chans = json.load(open('app/channels.default.json'))
+          nums = [c['num'] for c in chans]
+          assert nums and len(nums) == len(set(nums)), 'duplicate channel nums'
+          assert all(c['name'] for c in chans), 'empty channel name'
+          "
+          # player must fetch the lineup from the state-backed route, not a
+          # checked-in file
+          grep -q 'channels.json' app/mtv.js
+          test -f admin/Dockerfile
+          python3 -m compileall -q admin
