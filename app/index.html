@@ -119,7 +119,7 @@
   #osd-track {
     left: max(6vw, env(safe-area-inset-left));
     bottom: max(8vh, calc(env(safe-area-inset-bottom) + 20px));
-    max-width: min(70vw, 850px);
+    max-width: 70vw;
     color: #f5f5ed;
     font-family: Arial, Helvetica, sans-serif;
     line-height: 1.18;
@@ -143,7 +143,7 @@
   #track-artist {
     display: block;
     font-family: "Archivo Black", "Arial Black", Arial, sans-serif;
-    font-size: clamp(22px, 3.8vmin, 47px);
+    font-size: max(22px, 3.8vmin);
     font-weight: 900;
     letter-spacing: -.035em;
     text-transform: uppercase;
@@ -152,7 +152,7 @@
   #track-song {
     display: block;
     margin-top: 5px;
-    font-size: clamp(18px, 2.9vmin, 36px);
+    font-size: max(18px, 2.9vmin);
     font-weight: 700;
     letter-spacing: -.02em;
     overflow-wrap: anywhere;
@@ -166,51 +166,6 @@
     line-height: 1.05;
     color: #f5f5edb3;
     text-shadow: 1px 2px 2px #000;
-  }
-
-  /* A station bug, not a control: the picture stays the entire interface. */
-  #station-bug {
-    position: fixed;
-    right: max(5vw, env(safe-area-inset-right));
-    bottom: max(7.5vh, calc(env(safe-area-inset-bottom) + 18px));
-    width: clamp(57px, 8vmin, 100px);
-    color: #f4f4e8;
-    pointer-events: none;
-    opacity: .74;
-    filter: drop-shadow(2px 2px 0 #000a);
-    transform: rotate(-4deg);
-  }
-  .station-m {
-    display: block;
-    font-family: "Archivo Black", "Arial Black", sans-serif;
-    font-size: clamp(59px, 8.5vmin, 106px);
-    line-height: .86;
-    letter-spacing: -.14em;
-    transform: scaleX(1.06);
-    transform-origin: left;
-  }
-  .station-tv {
-    position: absolute;
-    right: -.18em;
-    top: .68em;
-    font-family: "Permanent Marker", cursive;
-    font-size: clamp(26px, 3.9vmin, 48px);
-    line-height: 1;
-    letter-spacing: -.12em;
-    color: #101010;
-    -webkit-text-stroke: 1px #f4f4e8;
-    transform: rotate(13deg);
-  }
-  .station-caption {
-    display: block;
-    margin-top: 6px;
-    font-family: Arial, sans-serif;
-    font-size: clamp(5px, .73vmin, 9px);
-    font-weight: 900;
-    line-height: 1;
-    letter-spacing: -.02em;
-    text-align: center;
-    white-space: nowrap;
   }
 
   /* The remote appears only on a tap and disappears after four seconds. */
@@ -282,8 +237,6 @@
   <div class="osd" id="osd-ch"></div>
   <div class="osd" id="osd-track" role="status" aria-live="polite" aria-atomic="true"><span id="track-artist"></span><span id="track-song"></span></div>
   <div class="osd" id="osd-mute">MUTED<br>TAP FOR SOUND</div>
-
-  <div id="station-bug" aria-label="MTV Music Television"><span class="station-m" aria-hidden="true">M</span><span class="station-tv" aria-hidden="true">TV</span><span class="station-caption" aria-hidden="true">MUSIC TELEVISION</span></div>
 
   <button id="catcher" aria-label="Turn on sound and show TV controls"></button>
   <div id="pads" aria-label="TV controls" aria-hidden="true" inert>
