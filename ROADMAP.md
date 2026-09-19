@@ -1,23 +1,30 @@
 # Roadmap
 
-## Status
+## Status (2026-09-19)
 
 Running in production at `mtv.thelunadog.com`. Player, mirror and admin page
 are all live and stable.
 
 - Player: deterministic clock-driven schedule, per-device channel memory,
-  local mp4 playback with a YouTube-iframe fallback before the first sync.
+  local mp4 playback. Pre-first-sync (or an empty manifest) shows a "NO
+  SIGNAL" card that polls every 30s and tunes in on its own — the old
+  YouTube-iframe fallback was removed.
 - Mirror: 6-hourly playlist sync, prune-safe on fetch failure.
 - Admin (`/admin`, LAN-only): lineup editor, sync trigger, now-playing
   monitor, and a viewers panel with geolocation.
 - Own repo (`alex/mtv`) with CI, deployed by `bin/deploy`.
+- Live lineup is currently a single channel (`channels.json`: num 1, name
+  "01") — the genre channels from a prior revert are still not restored.
 
-## Next
+## Backlog
 
-- **Fill in the genre channels.** Channels 2–4 (HIP HOP, GIRL POP, ALT) were
-  drafted but have no playlist ids, and a revert left the live lineup with a
-  single channel named "01". Needs real playlist ids, then a SYNC NOW.
-- **Restore the channel names** lost in that revert.
+Story points (1/2/3/5/8): 1–2 = mechanical, safe unattended; 3 = needs
+codebase context; 5–8 = design judgment or cross-service work.
+
+| pts | item |
+|---|---|
+| 1 | Delete the inline `mem_limit`/no-`memswap_limit` lines for `mtv`, `mtv-sync`, `mtv-admin` from `docker-compose.yml` — `services/apps-mem-limits.yml` already sets and wins all three (128m/512m/128m); the inline copies are dead weight. Acceptance: values removed from this repo's compose, `docker compose config` on the homelab still shows the same effective limits from the overlay. |
+| 2 [human-assisted] | Restore channels 2–4 (HIP HOP, GIRL POP, ALT) in `channels.json` with real YouTube playlist ids and their names, then trigger `SYNC NOW`. Blocked on the user supplying the three playlist ids — the admin-page edit itself is mechanical. Acceptance: `/admin` lineup shows 4 named channels, mirror pulls all four playlists, player shows non-"01" names on channels 2–4. |
 
 ## Considered and deliberately not done
 
@@ -39,3 +46,10 @@ are all live and stable.
 - Changing a channel's library reshuffles its schedule for everyone at once.
 - The schedule math is implemented twice — `app/mtv.js` and the admin's
   NOW PLAYING panel — and must be kept identical.
+
+## History
+
+- 2026-09 — CRT player, playlist mirror, admin + viewers panel shipped; own
+  repo (`alex/mtv`) with CI wired up; deploy health budget widened to 12
+  tries × 10s after a false rollback (mtv-admin briefly 502s post-recreate);
+  YouTube-iframe fallback replaced with a polling "NO SIGNAL" state.
