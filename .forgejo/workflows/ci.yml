@@ -27,3 +27,5 @@ jobs:
           grep -q 'channels.json' app/mtv.js
           test -f admin/Dockerfile
           python3 -m compileall -q admin
+          pip install --quiet fastapi==0.115.12 httpx
+          (cd admin && python3 test_schedule.py && python3 test_now.py)

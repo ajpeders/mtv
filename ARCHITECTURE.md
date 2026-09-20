@@ -31,9 +31,11 @@ Consequences worth knowing:
 - Nothing runs while nobody is watching; the schedule advances on paper.
 - Adding or removing a video reshuffles that channel — everyone jumps. This is
   acceptable because syncs are infrequent.
-- The admin page's NOW PLAYING panel re-implements this math exactly. If you
-  change the algorithm in `app/mtv.js`, change it in `admin/index.html` too or
-  the two disagree.
+- `admin/schedule.py` is the server-side twin of the browser implementation.
+  `admin/test_schedule.py` executes the real JavaScript functions under Node
+  and compares ordering, wall-clock picks, and credits against Python fixtures.
+- `GET /admin/api/now?ch=N` exposes the current item, offset, and next item to
+  the admin panel and the living-room Pi without adding a broadcast process.
 
 ## Sync (`sync.sh`)
 

@@ -2,3 +2,4 @@
 app/videos/*
 !app/videos/.gitkeep
 __pycache__/
+.venv/

@@ -11,7 +11,7 @@ are all live and stable.
   YouTube-iframe fallback was removed.
 - Mirror: 6-hourly playlist sync, prune-safe on fetch failure.
 - Admin (`/admin`, LAN-only): lineup editor, sync trigger, now-playing
-  monitor, and a viewers panel with geolocation.
+  monitor, viewers panel with geolocation, and `/admin/api/now` schedule API.
 - Own repo (`alex/mtv`) with CI, deployed by `bin/deploy`.
 - Live lineup is currently a single channel (`channels.json`: num 1, name
   "01") — the genre channels from a prior revert are still not restored.
@@ -46,12 +46,13 @@ codebase context; 5–8 = design judgment or cross-service work.
 - Viewers panel covers ~24h (the Traefik access log rotates daily).
 - Geolocation depends on an AdGuard allow rule for ip-api.com.
 - Changing a channel's library reshuffles its schedule for everyone at once.
-- The schedule math is implemented twice — `app/mtv.js` and the admin's
-  NOW PLAYING panel — and must be kept identical.
+- The schedule math is implemented twice, in browser JavaScript and Python;
+  `admin/test_schedule.py` executes both and prevents silent drift.
 
 ## History
 
 - 2026-09 — CRT player, playlist mirror, admin + viewers panel shipped; own
   repo (`alex/mtv`) with CI wired up; deploy health budget widened to 12
   tries × 10s after a false rollback (mtv-admin briefly 502s post-recreate);
-  YouTube-iframe fallback replaced with a polling "NO SIGNAL" state.
+  YouTube-iframe fallback replaced with a polling "NO SIGNAL" state;
+  `/admin/api/now` added as the schedule authority for the living-room Pi.

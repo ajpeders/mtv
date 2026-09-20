@@ -46,9 +46,8 @@ hardcoded in `main.py`.
 - The sync container is the other consumer of `/config/.sync-now`: it starts a
   pass within ~15s and deletes the file. `sync_pending` in `/admin/api/status`
   is just "does the flag file exist".
-- The NOW PLAYING panel fetches `/videos/manifest.json` from the browser —
-  i.e. through the *player's* nginx route on the same host. It works only when
-  the admin page is served under `mtv.thelunadog.com`; the panel degrades to
-  "NO MANIFEST YET" if that fetch fails.
+- The NOW PLAYING panel calls `/admin/api/now` once per lineup channel. The
+  endpoint reads the mounted manifest and uses `schedule.py`, whose output is
+  parity-tested against the player's JavaScript schedule.
 - Skip is per-device (`#remote` in the player); the admin page links to the
   remote but cannot skip other people's screens — by design, not a gap.

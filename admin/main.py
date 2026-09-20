@@ -19,6 +19,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 
+import schedule
+
 CONFIG_DIR = Path("/config")
 CHANNELS = CONFIG_DIR / "channels.json"
 SYNC_FLAG = CONFIG_DIR / ".sync-now"
@@ -86,6 +88,46 @@ def get_lineup():
         return JSONResponse({"detail": "channels.json is unreadable or not valid JSON"},
                             status_code=404)
     return data
+
+
+@app.get("/admin/api/now")
+def now_playing(ch: int = 1):
+    """Return what channel `ch` is airing at this instant."""
+    def unavailable(message):
+        return JSONResponse({"error": message}, status_code=404)
+
+    if not CHANNELS.exists():
+        return unavailable("no channels.json yet")
+    lineup = read_json(CHANNELS)
+    if not isinstance(lineup, list):
+        return unavailable("channels.json is unreadable")
+    if not any(isinstance(channel, dict) and channel.get("num") == ch for channel in lineup):
+        return unavailable(f"no channel {ch} in the lineup")
+    manifest = read_json(MANIFEST)
+    if manifest is None:
+        return unavailable("no manifest yet - nothing synced")
+    library = schedule.schedule_for(manifest, ch)
+    slot = schedule.on_air(library, time.time())
+    if slot is None:
+        return unavailable(f"channel {ch} has no playable videos")
+    current = slot["item"]
+    following = library[(slot["index"] + 1) % len(library)]
+
+    def describe(item):
+        credits = schedule.credit(item)
+        return {
+            "id": item["id"],
+            "title": item.get("title", ""),
+            "artist": credits["artist"],
+            "song": credits["song"],
+            "duration": float(item["duration"]),
+        }
+
+    body = describe(current)
+    body["offset"] = float(slot["offset"])
+    body["remaining"] = float(current["duration"]) - body["offset"]
+    return {"channel": ch, "now": body, "next": describe(following),
+            "url_base": "/videos/"}
 
 
 @app.put("/admin/api/lineup")

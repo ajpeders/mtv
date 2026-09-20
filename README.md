@@ -24,6 +24,7 @@ that passes CI deploys itself.
 | `https://mtv.thelunadog.com/` | the player — **public** |
 | `https://mtv.thelunadog.com/#remote` | player with the skip button enabled |
 | `https://mtv.thelunadog.com/admin` | lineup editor, sync, viewers — **LAN/VPN only** |
+| `GET /admin/api/now?ch=N` | current and next item for channel N — **LAN/VPN only** |
 
 ## Containers
 
