@@ -277,106 +277,63 @@
             });
         });
 
-        // ---- now playing: EXACT copy of the player's schedule math (mtv.js) ----
-        var EPOCH = 365472000; // 1981-08-01, MTV sign-on
-        var SEED = 1981;
-        function mulberry32(a) {
-          return function () {
-            a |= 0;
-            a = (a + 0x6d2b79f5) | 0;
-            var t = Math.imul(a ^ (a >>> 15), 1 | a);
-            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-          };
-        }
-        function scheduleFor(manifest, ch) {
-          var vids = manifest.videos || manifest;
-          var chans = manifest.channels || null;
-          var ids = chans && chans[String(ch.num)];
-          var items = vids.filter(function (it) {
-            return it.duration > 0 && (!ids || ids.indexOf(it.id) !== -1);
-          });
-          items.sort(function (a, b) {
-            return a.id < b.id ? -1 : 1;
-          });
-          var rnd = mulberry32(SEED + ch.num);
-          for (var i = items.length - 1; i > 0; i--) {
-            var j = Math.floor(rnd() * (i + 1));
-            var t = items[i];
-            items[i] = items[j];
-            items[j] = t;
-          }
-          return items;
-        }
-        function onAir(lib) {
-          var total = lib.reduce(function (s, it) {
-            return s + it.duration;
-          }, 0);
-          if (!total) return null;
-          var off = (Date.now() / 1000 - EPOCH) % total;
-          for (var i = 0; i < lib.length; i++) {
-            if (off < lib[i].duration) return { it: lib[i], off: off };
-            off -= lib[i].duration;
-          }
-          return { it: lib[0], off: 0 };
-        }
+        // ---- now playing: schedule.py is the server-side twin of mtv.js ----
         function fmtOff(s) {
           var m = Math.floor(s / 60),
             sec = Math.floor(s % 60);
           return "  " + m + ":" + ("0" + sec).slice(-2) + " IN";
         }
         function refreshOnAir() {
-          Promise.all([
-            fetch("/admin/api/lineup")
-              .then(function (r) {
-                return r.ok ? r.json() : [];
-              })
-              .catch(function () {
-                return [];
-              }),
-            fetch("/videos/manifest.json", { cache: "no-store" })
-              .then(function (r) {
-                return r.ok ? r.json() : null;
-              })
-              .catch(function () {
-                return null;
-              }),
-          ]).then(function (rs) {
-            var lineup = rs[0] || [],
-              manifest = rs[1];
-            var el = $("onair");
-            if (!manifest) {
-              el.textContent = "NO MANIFEST YET — NOTHING SYNCED";
-              return;
-            }
-            el.textContent = "";
-            lineup.forEach(function (ch) {
-              var d = document.createElement("div");
-              var label = "CH " + String(ch.num).padStart(2, "0");
-              var slot = onAir(scheduleFor(manifest, ch));
-              var channel = document.createElement("span");
-              channel.className = "monitor-channel";
-              channel.textContent = label;
-              d.appendChild(channel);
-              if (slot) {
-                var title = document.createElement("span");
-                title.className = "monitor-track";
-                title.textContent = slot.it.title;
-                d.appendChild(title);
-                var o = document.createElement("span");
-                o.className = "off";
-                o.textContent = fmtOff(slot.off);
-                d.appendChild(o);
-              } else {
-                var off = document.createElement("span");
-                off.textContent = "Off air · waiting for videos";
-                d.appendChild(off);
-                d.className = "off";
+          fetch("/admin/api/lineup")
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .catch(function () { return []; })
+            .then(function (lineup) {
+              var el = $("onair");
+              if (!lineup.length) {
+                el.textContent = "NO CHANNELS CONFIGURED";
+                return;
               }
-              el.appendChild(d);
+              return Promise.all(lineup.map(function (ch) {
+                return fetch("/admin/api/now?ch=" + encodeURIComponent(ch.num), {
+                  cache: "no-store",
+                })
+                  .then(function (r) {
+                    return r.json().then(function (body) {
+                      return { ok: r.ok, body: body };
+                    });
+                  })
+                  .catch(function () {
+                    return { ok: false, body: { error: "unreachable" } };
+                  });
+              })).then(function (results) {
+                el.textContent = "";
+                lineup.forEach(function (ch, i) {
+                  var d = document.createElement("div");
+                  var channel = document.createElement("span");
+                  channel.className = "monitor-channel";
+                  channel.textContent = "CH " + String(ch.num).padStart(2, "0");
+                  d.appendChild(channel);
+                  var result = results[i];
+                  if (result.ok) {
+                    var title = document.createElement("span");
+                    title.className = "monitor-track";
+                    title.textContent = result.body.now.title;
+                    d.appendChild(title);
+                    var offset = document.createElement("span");
+                    offset.className = "off";
+                    offset.textContent = fmtOff(result.body.now.offset);
+                    d.appendChild(offset);
+                  } else {
+                    var off = document.createElement("span");
+                    off.textContent = "Off air · " +
+                      (result.body.error || "waiting for videos");
+                    d.appendChild(off);
+                    d.className = "off";
+                  }
+                  el.appendChild(d);
+                });
+              });
             });
-            if (!lineup.length) el.textContent = "NO CHANNELS CONFIGURED";
-          });
         }
 
         // ---- viewers panel ----
@@ -426,7 +383,7 @@
         refreshOnAir();
         refreshViewers();
         setInterval(refreshStatus, 30000);
-        setInterval(refreshOnAir, 60000);
+        setInterval(refreshOnAir, 10000);
         setInterval(refreshViewers, 60000);
       })();
     </script>

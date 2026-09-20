@@ -7,7 +7,7 @@ RUN adduser -D -u 1000 mtv
 USER mtv
 
 WORKDIR /app
-COPY main.py index.html ./
+COPY main.py schedule.py index.html ./
 
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

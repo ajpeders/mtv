@@ -1,0 +1,17 @@
+{
+  "videos": [
+    {"id": "aaa111", "title": "Drake - Choosin' Texas (Feat. Don Toliver) (Official Video)", "duration": 197.65},
+    {"id": "bbb222", "title": "I KNOW ITS TRUE DRAKE", "duration": 106.12},
+    {"id": "ccc333", "title": "AZ Chike – Look Like My Mama [Official Music Video]", "duration": 232.25},
+    {"id": "ddd444", "title": "ZILLA — \"Westside Gunn\" (Lyrics)", "duration": 153.09},
+    {"id": "eee555", "title": "matt proxy - misery (official music video)", "duration": 280.01},
+    {"id": "fff666", "title": "WALLFLOWER - DOMINIC FIKE", "duration": 177.28, "artist": "Dominic Fike", "track": "Wallflower"},
+    {"id": "ggg777", "title": "Small Pond (Visualizer)", "duration": 0},
+    {"id": "hhh888", "title": "Some Band - Some Song - With Dash", "duration": 200.5},
+    {"id": "iii999", "title": "No Separator Here", "duration": 90.0}
+  ],
+  "channels": {
+    "1": ["aaa111", "bbb222", "ccc333", "ddd444", "eee555", "fff666", "ggg777"],
+    "2": ["hhh888", "iii999", "aaa111"]
+  }
+}
