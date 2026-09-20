@@ -13,23 +13,21 @@ are all live and stable.
 - Admin (`/admin`, LAN-only): lineup editor, sync trigger, now-playing
   monitor, viewers panel with geolocation, and `/admin/api/now` schedule API.
 - Own repo (`alex/mtv`) with CI, deployed by `bin/deploy`.
-- Live lineup is currently a single channel (`channels.json`: num 1, name
-  "01") — the genre channels from a prior revert are still not restored.
+- Live lineup is a single channel (`channels.json`: num 1, name "01").
+  Multi-channel restore is deliberately deferred — see below.
 
 ## Backlog
 
-Story points (1/2/3/5/8): 1–2 = mechanical, safe unattended; 3 = needs
-codebase context; 5–8 = design judgment or cross-service work.
-
-| pts | item |
-|---|---|
-| 1 | ✅ Delete the inline `mem_limit`/no-`memswap_limit` lines for `mtv`, `mtv-sync`, `mtv-admin` from `docker-compose.yml` — `services/apps-mem-limits.yml` already sets and wins all three (128m/512m/128m); the inline copies are dead weight. Acceptance: values removed from this repo's compose, `docker compose config` on the homelab still shows the same effective limits from the overlay. |
-| 2 [human-assisted] | Restore channels 2–4 (HIP HOP, GIRL POP, ALT) in `channels.json` with real YouTube playlist ids and their names, then trigger `SYNC NOW`. Blocked on the user supplying the three playlist ids — the admin-page edit itself is mechanical. Acceptance: `/admin` lineup shows 4 named channels, mirror pulls all four playlists, player shows non-"01" names on channels 2–4. |
-| 1 | ✅ Remove the `#station-bug` MTV logo (bottom-right, `app/index.html`). Delete the element and its CSS (`#station-bug`, `.station-m`, `.station-tv`, `.station-caption`). Acceptance: no logo on the player at any viewport; credits and channel OSD unchanged. |
-| 2 | ✅ Scale the now-playing credits (`#osd-track`) for 4K/large screens. The `clamp()` px ceilings cap it: `#track-artist` 47px, `#track-song` 36px, `max-width: min(70vw, 850px)` — on a 3840px-wide screen that reads as a tiny corner caption. Raise or drop the px maxima (and the 850px width cap) so the block scales with `vmin`; keep the phone minima. Acceptance: at 3840x2160 the artist line is roughly 3.8vmin (~82px) tall; unchanged on phones. |
+None. Story points for future items (1/2/3/5/8): 1–2 = mechanical, safe
+unattended; 3 = needs codebase context; 5–8 = design judgment or
+cross-service work. The 2026-09 backlog is shipped — see History.
 
 ## Considered and deliberately not done
 
+- **Restoring the genre channels (2–4).** The single-channel lineup is
+  working fine, and the extra channels need three YouTube playlist ids that
+  aren't worth chasing right now. Revisit if HIP HOP / GIRL POP / ALT are
+  actually wanted.
 - **Auth on the admin page.** `local-only@file` is the gate. Adding app-level
   auth would duplicate the Traefik middleware and add a credential to manage.
 - **Skipping other people's screens.** Skip is remote-holder-only and
@@ -56,3 +54,6 @@ codebase context; 5–8 = design judgment or cross-service work.
   tries × 10s after a false rollback (mtv-admin briefly 502s post-recreate);
   YouTube-iframe fallback replaced with a polling "NO SIGNAL" state;
   `/admin/api/now` added as the schedule authority for the living-room Pi.
+- 2026-09 — backlog burn-down: dropped inline `mem_limit`/`memswap_limit`
+  lines (the `apps-mem-limits` overlay wins), removed the `#station-bug`
+  logo, and scaled the now-playing credits with `vmin` for 4K screens.
