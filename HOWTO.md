@@ -55,8 +55,8 @@ print(socket.getaddrinfo('ip-api.com',80)[0][4][0])"` — anything other than
 
 ## Change the player's look
 
-Everything visual is in `app/` (`index.html`, `theme.css`, `watch.css`,
-`control-room.css`, `mtv.js`). The admin page is a **separate container** built
+Everything visual is in `app/index.html` (markup and the inline CRT styles)
+and `app/mtv.js` (player logic). The admin page is a **separate container** built
 from `admin/` — reverting the player does not touch it. Do not restore an older
 `docker-compose.yml` over the current one to revert a look: pre-`mtv-admin`
 versions have no admin service and will delete it.
