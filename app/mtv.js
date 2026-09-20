@@ -15,7 +15,6 @@
   var muted = true;
   var osdTimer = null;
   var padsTimer = null;
-  var creditsTimer = null;
   var credits = null;
 
   var $ = function (id) { return document.getElementById(id); };
@@ -73,18 +72,17 @@
     return { artist: artist, song: song.replace(/^["“](.*)["”]$/, "$1") };
   }
 
+  // Credits stay pinned for as long as the video is on air, so a viewer who
+  // tunes in mid-song still knows what is playing. Cleared on channel change.
   function showCredits() {
     if (!credits || !credits.song) return;
     $("track-artist").textContent = credits.artist;
     $("track-artist").hidden = !credits.artist;
     $("track-song").textContent = "“" + credits.song + "”";
     $("osd-track").classList.add("show");
-    clearTimeout(creditsTimer);
-    creditsTimer = setTimeout(function () { $("osd-track").classList.remove("show"); }, 8000);
   }
 
   function clearCredits() {
-    clearTimeout(creditsTimer);
     credits = null;
     $("osd-track").classList.remove("show");
   }
@@ -234,7 +232,6 @@
     $("pad-cast").hidden = !active.webkitShowPlaybackTargetPicker;
 
     var currentId = null;
-    var outroShown = false;
     var prep = null; // id currently loaded into standby
     // #remote skip puts this screen on a "detour": it follows the schedule
     // in order, each video from the top, ignoring the live clock. Rejoins
@@ -257,7 +254,6 @@
 
     function playItem(it, off) {
       currentId = it.id;
-      outroShown = false;
       prep = null;
       active.src = "/videos/" + it.id + ".mp4";
       active.load();
@@ -319,7 +315,6 @@
       old.classList.remove("on");
       old.pause();
       currentId = prep;
-      outroShown = false;
       prep = null;
       var nowPlaying = null;
       playable().forEach(function (it) { if (it.id === currentId) nowPlaying = it; });
@@ -351,11 +346,6 @@
       onScreenEvent(v, "timeupdate", function (e) {
         if (e.target !== active) return;
         maybePreload();
-        // Bring back the corner credits as the video signs off.
-        if (!outroShown && active.duration > 30 && active.currentTime >= active.duration - 12) {
-          outroShown = true;
-          showCredits();
-        }
       });
       // advance past genuinely broken files only — a src swap aborts the
       // previous load and that abort also lands here
@@ -440,7 +430,6 @@
     var queue = null; // harvested + shuffled playlist ids; null while bootstrapping
     var cursor = 0;
     var videoId = null;
-    var outroShown = false;
 
     // a remembered channel may have no playlist configured yet
     if (!currentCh().playlist) {
@@ -519,7 +508,6 @@
               var id = d && (d.video_id || d.title);
               if (id && id !== videoId) {
                 videoId = id;
-                outroShown = false;
                 showOsd(d.title);
               }
             }
@@ -532,14 +520,6 @@
     var tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
-    setInterval(function () {
-      if (!player || !videoId || outroShown || document.hidden) return;
-      var duration = player.getDuration();
-      if (duration > 30 && player.getCurrentTime() >= duration - 12) {
-        outroShown = true;
-        showCredits();
-      }
-    }, 1000);
   }
 
   // ---- pick backend ----
