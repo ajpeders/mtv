@@ -113,7 +113,12 @@ class Parity(unittest.TestCase):
                              item["id"])
         self.assertEqual(self.js["credits"]["fff666"], {
             "artist": "Dominic Fike", "song": "Wallflower", "album": "Sunburn", "year": 2023,
+            "featured": "Kacy Hill, Someone Else", "genre": "indie pop · alternative rock",
+            "release": "",
         })
+        # No album: say what it is instead, so the detail line isn't just a year.
+        self.assertEqual(self.js["credits"]["eee555"]["release"], "Single")
+        self.assertEqual(self.js["credits"]["aaa111"]["featured"], "")
 
     def test_zero_duration_and_unknown_channel(self):
         ids = [item["id"] for item in schedule.schedule_for(self.manifest, 1)]

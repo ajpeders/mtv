@@ -122,6 +122,9 @@ def now_playing(ch: int = 1):
             "song": credits["song"],
             "album": credits["album"],
             "year": credits["year"],
+            "featured": credits["featured"],
+            "genre": credits["genre"],
+            "release": credits["release"],
             "duration": float(item["duration"]),
         }
 

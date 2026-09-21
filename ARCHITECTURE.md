@@ -59,7 +59,12 @@ Runs forever in `mtv-sync`, one pass per `SYNC_INTERVAL` (default 6h) or when
 
 Before each manifest publish, `mtv-sync` reads enriched `music-video` items
 from mediaDb over the internal Docker network. Matching is by YouTube video id;
-artist, canonical track title, album, and year are copied into `manifest.json`.
+artist, canonical track title, album, year, featured artists, genres (the
+top two are shown) and release type are copied into `manifest.json`. The
+player's credits and `/admin/api/now` (which the living-room Pi renders) share
+one parser, `creditText` in `app/mtv.js`, mirrored by `credit()` in
+`admin/schedule.py`: Artist / "Song" feat. X / Album (or Single/EP) · Year /
+genres.
 The request is best-effort, so a down or incomplete mediaDb falls back to the
 YouTube playlist title without interrupting downloads or playback. The browser
 never calls mediaDb directly, preserving public access to MTV while mediaDb

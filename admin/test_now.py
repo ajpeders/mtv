@@ -38,10 +38,11 @@ class NowEndpoint(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["channel"], 1)
         self.assertEqual(body["url_base"], "/videos/")
-        for key in ("id", "title", "artist", "song", "album", "year",
+        for key in ("id", "title", "artist", "song", "album", "year", "featured", "genre", "release",
                     "offset", "remaining", "duration"):
             self.assertIn(key, body["now"])
-        for key in ("id", "title", "artist", "song", "album", "year", "duration"):
+        for key in ("id", "title", "artist", "song", "album", "year", "featured", "genre", "release",
+                    "duration"):
             self.assertIn(key, body["next"])
         self.assertAlmostEqual(body["now"]["offset"] + body["now"]["remaining"],
                                body["now"]["duration"], places=3)

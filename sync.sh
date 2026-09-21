@@ -164,6 +164,10 @@ if base_url:
                         "track": item.get("title"),
                         "album": detail.get("album"),
                         "year": item.get("year"),
+                        "featured": detail.get("featured_artists"),
+                        # yt-dlp's category "Music" isn't a genre
+                        "genre": [g for g in detail.get("genre") or [] if g.casefold() != "music"],
+                        "release_type": detail.get("release_type"),
                     }
             offset += len(items)
             if not items or offset >= page.get("total", 0):
