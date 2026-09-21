@@ -8,6 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare Python test environment
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3-venv
+          python3 -m venv /tmp/mtv-venv
+          /tmp/mtv-venv/bin/pip install --quiet fastapi==0.115.12 httpx
       - name: Sanity-check player, sync script and admin app
         run: |
           test -f app/index.html
@@ -27,5 +33,4 @@ jobs:
           grep -q 'channels.json' app/mtv.js
           test -f admin/Dockerfile
           python3 -m compileall -q admin
-          pip install --quiet fastapi==0.115.12 httpx
-          (cd admin && python3 test_schedule.py && python3 test_now.py)
+          (cd admin && /tmp/mtv-venv/bin/python test_schedule.py && /tmp/mtv-venv/bin/python test_now.py)
