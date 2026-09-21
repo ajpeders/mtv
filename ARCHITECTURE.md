@@ -46,15 +46,32 @@ Runs forever in `mtv-sync`, one pass per `SYNC_INTERVAL` (default 6h) or when
    last known list rather than treating the playlist as empty.
 2. Publish the manifest of what is already local, so a long first download puts
    finished videos on air immediately.
-3. Download the union of all playlists — h264 + aac mp4 ≤1080p, because iOS
-   Safari cannot play vp9/webm. A video in two channels is one file, keyed by
-   video id.
-4. Prune videos in no playlist — **skipped entirely if any fetch failed**, so a
+3. Download the union of all playlists — h264 + aac mp4 ≤1080p (what YouTube
+   serves; iOS Safari cannot play vp9/webm at the container's negotiation
+   layer). A video in two channels is one file, keyed by video id.
+4. Transcode each freshly-downloaded file to **HEVC** (libx265, CRF 23,
+   AAC stream-copy, `hvc1` tag) in place — see *Codec* below. The H.264 source
+   is only overwritten on a clean ffmpeg exit; a crash mid-transcode leaves
+   the file untouched and the next pass retries.
+5. Prune videos in no playlist — **skipped entirely if any fetch failed**, so a
    transient YouTube error cannot wipe the library.
-5. Publish the manifest again.
+6. Publish the manifest again.
 
 Durations come from `ffprobe`, cached in `.durations.json`; they are the only
 input the schedule needs.
+
+### Codec
+
+Library files are stored as **HEVC in MP4** (`hvc1`). iOS Safari ≥11 plays
+HEVC MP4 natively, so the iOS-browser audience is unaffected. The reason
+for the round-trip: the living-room Pi (mpv on Pi5) has a hardware HEVC
+decoder (`rpi_hevc_dec` via V4L2 m2m) and **no H.264 hardware decoder**, so
+H.264 streams pin a CPU core at ~95% and visibly stutter. Storing HEVC gives
+the Pi zero-cost decode (~5% CPU) and a smaller file (CRF 23 ≈ 60% of the
+H.264 size for this source). The transcode is software `libx265` inside the
+`sync.sh` container — slow per file, but a one-time cost amortised across
+all future downloads. `sync.sh transcode-library` walks the existing library
+once and is idempotent: already-HEVC files are probed and skipped.
 
 ## Routing
 

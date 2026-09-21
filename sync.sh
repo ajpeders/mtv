@@ -13,12 +13,18 @@
 #      /tmp/pl.<num>.tsv; a failed fetch keeps the last known list)
 #   2. publish a manifest of what's already local (so a long first download
 #      still puts finished videos on air immediately)
-#   3. download anything new across the union of all playlists (h264+aac mp4
-#      ≤1080p — iOS Safari can't do vp9/webm); a video in two playlists is
-#      one file, keyed by video id
+#   3. download anything new across the union of all playlists (≤1080p mp4,
+#      transcoded to HEVC after download — see HEVC_TRANSCODE below); a
+#      video in two playlists is one file, keyed by video id
 #   4. delete local videos no longer in ANY playlist (and unarchive them so a
 #      re-added video gets re-downloaded) — skipped if any fetch failed
 #   5. publish the manifest again
+#
+# One-shot mode: `sync.sh transcode-library` walks every mp4 under $DIR and
+# transcodes any that are still H.264 (probed first, so the operation is
+# idempotent — already-HEVC files are skipped). Used to convert an existing
+# library after switching to HEVC. Run once per host upgrade; resumes
+# safely across restarts.
 set -u
 
 DIR=/videos
@@ -29,7 +35,74 @@ ARCHIVE="$DIR/.archive"
 UNION=/tmp/union.tsv
 TAB=$(printf '\t')
 
+# Disable the HEVC transcode step by setting HEVC_TRANSCODE=0. Default: on.
+# The Pi5 client (mpv) has a hardware HEVC decoder but no H.264 one, so the
+# living-room TV stutters on H.264 software decode. Keeping library files as
+# HEVC gives the Pi zero-cost decode and a smaller download.
+HEVC_TRANSCODE="${HEVC_TRANSCODE:-1}"
+# libx265 preset / quality. CRF 23 is "visually lossless" for this source
+# (1080p music video) and ~60% of the original H.264 size. -tag:v hvc1 is
+# what iOS Safari reads; the default (hev1) sometimes plays, sometimes
+# doesn't. -c:a copy keeps AAC without re-encoding.
+X265_CRF="${X265_CRF:-23}"
+X265_PRESET="${X265_PRESET:-medium}"
+
+# transcoded_path <input.mp4>
+#   Transcode to HEVC in place. Atomic via temp file + mv. The original H.264
+#   bytes are only overwritten on a successful exit, so a crash mid-transcode
+#   leaves the source intact (ffmpeg would still be reading from the inode).
+transcoded_path() {
+    src="$1"
+    [ -f "$src" ] || return 0
+    # Skip if already HEVC — keeps the script idempotent for re-runs.
+    cur=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name \
+              -of default=nw=1:nk=1 "$src" 2>/dev/null)
+    case "$cur" in
+        hevc|h265) echo "[x265] $(basename "$src"): already HEVC, skip"; return 0 ;;
+    esac
+    tmp="$src.transcoding.mp4"
+    if ffmpeg -hide_banner -loglevel error -nostdin -y \
+            -i "$src" \
+            -c:v libx265 -preset "$X265_PRESET" -crf "$X265_CRF" -tag:v hvc1 \
+            -c:a copy -movflags +faststart \
+            "$tmp"; then
+        # Preserve mtime so the manifest's saved_at ordering is unaffected.
+        touch -r "$src" "$tmp" 2>/dev/null || :
+        mv "$tmp" "$src"
+        echo "[x265] $(basename "$src"): H.264 -> HEVC done"
+    else
+        rm -f "$tmp"
+        echo "[x265] $(basename "$src"): FAILED (H.264 source preserved)" >&2
+        return 1
+    fi
+}
+
+# transcode_one_per_id <id>
+#   After yt-dlp writes <id>.mp4, transcode it if HEVC_TRANSCODE=1.
+transcode_one_per_id() {
+    id="$1"
+    [ "$HEVC_TRANSCODE" = 1 ] || return 0
+    transcoded_path "$DIR/$id.mp4"
+}
+
 [ -f "$CHANNELS" ] || cp /app/channels.default.json "$CHANNELS"
+
+# --- one-shot: transcode-library -----------------------------------------
+# Walks every local mp4 and transcodes any that are still H.264 (idempotent:
+# already-HEVC files are skipped via ffprobe). Useful after switching the
+# library to HEVC for the Pi5 client. Prints progress, exits non-zero if any
+# file failed (so callers can tell partial success apart from full).
+if [ "${1:-}" = "transcode-library" ]; then
+    n=0; failed=0
+    for f in "$DIR"/*.mp4; do
+        [ -e "$f" ] || continue
+        n=$((n + 1))
+        transcoded_path "$f" || failed=$((failed + 1))
+    done
+    echo "[x265] transcode-library: $((n - failed))/$n succeeded"
+    [ "$failed" = 0 ]
+    exit $?
+fi
 
 # SYNC_INTERVAL in seconds, for the trigger-aware sleep below
 case "$INTERVAL" in
@@ -132,6 +205,16 @@ while :; do
       --download-archive "$ARCHIVE" \
       --no-progress --ignore-errors \
       -a /tmp/dl.txt
+    # Transcode every freshly-downloaded H.264 file to HEVC. Idempotent: files
+    # that are already HEVC from a prior pass are skipped (probed by
+    # transcoded_path). Runs after yt-dlp so a transient download error leaves
+    # the source untouched — the H.264 stays in place until a clean retry.
+    if [ "$HEVC_TRANSCODE" = 1 ]; then
+      while IFS="$TAB" read -r id _rest; do
+        [ -n "$id" ] || continue
+        transcode_one_per_id "$id"
+      done < "$UNION"
+    fi
 
     if [ "$ok" = 1 ]; then
       for f in "$DIR"/*.mp4; do
