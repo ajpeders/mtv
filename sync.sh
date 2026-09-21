@@ -9,10 +9,11 @@
 # of the playlists existing.
 #
 # Each pass:
-#   1. fetch each channel playlist's id<TAB>title list (kept per-channel in
-#      /tmp/pl.<num>.tsv; a failed fetch keeps the last known list)
+#   1. fetch each channel playlist's id<TAB>title<TAB>channel list (kept
+#      per-channel in /tmp/pl.<num>.tsv; a failed fetch keeps the last known list)
 #   2. publish a manifest of what's already local (so a long first download
-#      still puts finished videos on air immediately)
+#      still puts finished videos on air immediately), and an <id>.info.json
+#      sidecar per video so mediaDb can enrich it without asking YouTube
 #   3. download anything new across the union of all playlists (≤1080p mp4,
 #      transcoded to HEVC after download — see HEVC_TRANSCODE below); a
 #      video in two playlists is one file, keyed by video id
@@ -171,6 +172,30 @@ if base_url:
     except Exception as error:
         print(f"[sync] mediadb unavailable, using playlist titles: {error}", file=sys.stderr)
 
+def write_sidecar(vid, title, channel):
+    # mediaDb reads <id>.info.json before asking YouTube, which now demands
+    # sign-in from the homelab. The playlist listing already has the title
+    # ("Artist - Song") and channel, so hand them over. Never overwrite a
+    # sidecar we didn't write (a full yt-dlp --write-info-json is richer).
+    if not title or title == "NA":
+        return
+    data = {"id": vid, "title": title, "_source": "mtv-playlist"}
+    if channel and channel != "NA":
+        data["channel"] = channel
+    path = os.path.join(d, vid + ".info.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            existing = json.load(f)
+        if existing.get("_source") != "mtv-playlist" or existing == data:
+            return
+    except (OSError, ValueError):
+        pass
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    os.replace(tmp, path)
+
+
 videos = {}    # id -> {id, title, duration}
 channels = {}  # channel num -> [ids]
 for tsv in sys.argv[2:]:
@@ -178,10 +203,11 @@ for tsv in sys.argv[2:]:
     ids = channels.setdefault(num, [])
     seen = set(ids)   # a playlist can contain the same video twice
     for line in open(tsv, encoding="utf-8"):
-        vid, _, title = line.rstrip("\n").partition("\t")
+        vid, title, channel = (line.rstrip("\n").split("\t") + ["", ""])[:3]
         path = os.path.join(d, vid + ".mp4")
         if not vid or not os.path.exists(path):
             continue
+        write_sidecar(vid, title, channel)
         if vid not in videos:
             dur = cache.get(vid)
             if dur is None:
@@ -214,7 +240,7 @@ while :; do
   ok=1
   lineup > /tmp/lineup.tsv
   while IFS="$TAB" read -r num pl; do
-    if yt-dlp --flat-playlist --print "%(id)s	%(title)s" \
+    if yt-dlp --flat-playlist --print "%(id)s	%(title)s	%(channel)s" \
          "https://www.youtube.com/playlist?list=$pl" > "/tmp/pl.$num.new" 2>/tmp/sync.err \
        && [ -s "/tmp/pl.$num.new" ]; then
       mv "/tmp/pl.$num.new" "/tmp/pl.$num.tsv"
@@ -257,7 +283,7 @@ while :; do
         id=$(basename "$f" .mp4)
         if ! grep -q "^$id$TAB" "$UNION"; then
           echo "[sync] pruning $id (in no channel playlist)"
-          rm -f "$f"
+          rm -f "$f" "$DIR/$id.info.json"
           [ -f "$ARCHIVE" ] && sed -i "/ $id\$/d" "$ARCHIVE"
         fi
       done

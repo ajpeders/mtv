@@ -65,6 +65,14 @@ YouTube playlist title without interrupting downloads or playback. The browser
 never calls mediaDb directly, preserving public access to MTV while mediaDb
 remains LAN-only.
 
+Data also flows the other way. mediaDb can't fetch YouTube metadata itself
+(YouTube demands sign-in from the homelab), so the same manifest step writes an
+`<id>.info.json` sidecar next to each video with the playlist's title and
+channel, marked `"_source": "mtv-playlist"`. mediaDb reads sidecars before
+trying YouTube, then matches MusicBrainz for album and year, which come back
+here on the next sync. A sidecar MTV didn't write is never overwritten, and
+pruning a video removes its sidecar.
+
 Durations come from `ffprobe`, cached in `.durations.json`; they are the only
 input the schedule needs.
 
