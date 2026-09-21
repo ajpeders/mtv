@@ -157,6 +157,15 @@
     letter-spacing: -.02em;
     overflow-wrap: anywhere;
   }
+  #track-detail {
+    display: block;
+    margin-top: 7px;
+    font-size: max(14px, 2.1vmin);
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+  }
   #osd-mute {
     top: max(5vh, env(safe-area-inset-top));
     right: 5vw;
@@ -235,7 +244,7 @@
   <div class="layer" id="vignette"></div>
 
   <div class="osd" id="osd-ch"></div>
-  <div class="osd" id="osd-track" role="status" aria-live="polite" aria-atomic="true"><span id="track-artist"></span><span id="track-song"></span></div>
+  <div class="osd" id="osd-track" role="status" aria-live="polite" aria-atomic="true"><span id="track-artist"></span><span id="track-song"></span><span id="track-detail" hidden></span></div>
   <div class="osd" id="osd-mute">MUTED<br>TAP FOR SOUND</div>
 
   <button id="catcher" aria-label="Turn on sound and show TV controls"></button>
@@ -250,6 +259,6 @@
 
   <div id="boot">TUNING…</div>
 
-  <script src="mtv.js?v=9"></script>
+  <script src="mtv.js?v=10"></script>
 </body>
 </html>

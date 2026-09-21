@@ -8,6 +8,10 @@ in and join whatever is already playing.
 Videos are mirrored locally from YouTube playlists, so playback does not depend
 on YouTube at watch time.
 
+During each sync, MTV reads enriched music-video metadata from mediaDb and puts
+artist, song, album, and year into the local manifest. Playback remains
+independent: if mediaDb is unavailable, playlist titles are used instead.
+
 ## Quick start
 
 ```sh
@@ -31,7 +35,7 @@ that passes CI deploys itself.
 | Name | Image | Role |
 |---|---|---|
 | `mtv` | nginx | serves the player and the mirrored mp4s |
-| `mtv-sync` | yt-dlp | mirrors each channel's playlist, builds `manifest.json` |
+| `mtv-sync` | yt-dlp | mirrors each channel's playlist, enriches and builds `manifest.json` |
 | `mtv-admin` | FastAPI (built here) | `/admin` — lineup, sync trigger, now-playing, viewers |
 
 ## Key commands

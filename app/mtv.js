@@ -69,7 +69,9 @@
     var split = clean.match(/^(.+?)\s+[-–—]\s+(.+)$/);
     var artist = (item && typeof item === "object" && item.artist) || (split ? split[1] : "");
     var song = (item && typeof item === "object" && item.track) || (split ? split[2] : clean);
-    return { artist: artist, song: song.replace(/^["“](.*)["”]$/, "$1") };
+    var album = (item && typeof item === "object" && item.album) || "";
+    var year = (item && typeof item === "object" && item.year) || "";
+    return { artist: artist, song: song.replace(/^["“](.*)["”]$/, "$1"), album: album, year: year };
   }
 
   // Credits stay pinned for as long as the video is on air, so a viewer who
@@ -79,6 +81,9 @@
     $("track-artist").textContent = credits.artist;
     $("track-artist").hidden = !credits.artist;
     $("track-song").textContent = "“" + credits.song + "”";
+    var detail = [credits.album, credits.year].filter(function (value) { return !!value; }).join(" · ");
+    $("track-detail").textContent = detail;
+    $("track-detail").hidden = !detail;
     $("osd-track").classList.add("show");
   }
 
