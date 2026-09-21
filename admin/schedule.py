@@ -63,6 +63,7 @@ _SUFFIX = re.compile(
     r"\s*[\[(](?:(?:official\s+)?(?:music\s+|lyric\s+)?video|official\s+audio|visuali[sz]er|lyrics?)[\])]\s*$",
     re.I)
 _SPLIT = re.compile(r"^(.+?)\s+[-–—]\s+(.+)$", re.S)
+_RELEASE = {"single": "Single", "ep": "EP"}
 _QUOTES = re.compile(r'^["“](.*)["”]$', re.S)
 
 
@@ -74,9 +75,13 @@ def credit(item):
     obj = item if isinstance(item, dict) else {}
     artist = obj.get("artist") or (match.group(1) if match else "")
     song = obj.get("track") or (match.group(2) if match else clean)
+    album = obj.get("album") or ""
     return {
         "artist": artist,
         "song": _QUOTES.sub(r"\1", song),
-        "album": obj.get("album") or "",
+        "album": album,
         "year": obj.get("year") or "",
+        "featured": ", ".join(obj.get("featured") or []),
+        "genre": " · ".join((obj.get("genre") or [])[:2]),
+        "release": "" if album else _RELEASE.get(obj.get("release_type") or "", ""),
     }

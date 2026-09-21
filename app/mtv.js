@@ -71,7 +71,16 @@
     var song = (item && typeof item === "object" && item.track) || (split ? split[2] : clean);
     var album = (item && typeof item === "object" && item.album) || "";
     var year = (item && typeof item === "object" && item.year) || "";
-    return { artist: artist, song: song.replace(/^["“](.*)["”]$/, "$1"), album: album, year: year };
+    var obj = item && typeof item === "object" ? item : {};
+    return {
+      artist: artist,
+      song: song.replace(/^["“](.*)["”]$/, "$1"),
+      album: album,
+      year: year,
+      featured: (obj.featured || []).join(", "),
+      genre: (obj.genre || []).slice(0, 2).join(" · "),
+      release: album ? "" : ({ single: "Single", ep: "EP" })[obj.release_type] || ""
+    };
   }
 
   // Credits stay pinned for as long as the video is on air, so a viewer who
@@ -81,9 +90,17 @@
     $("track-artist").textContent = credits.artist;
     $("track-artist").hidden = !credits.artist;
     $("track-song").textContent = "“" + credits.song + "”";
-    var detail = [credits.album, credits.year].filter(function (value) { return !!value; }).join(" · ");
+    if (credits.featured) {
+      var feat = document.createElement("span");
+      feat.className = "feat";
+      feat.textContent = " feat. " + credits.featured;
+      $("track-song").appendChild(feat);
+    }
+    var detail = [credits.album || credits.release, credits.year].filter(function (value) { return !!value; }).join(" · ");
     $("track-detail").textContent = detail;
     $("track-detail").hidden = !detail;
+    $("track-genre").textContent = credits.genre;
+    $("track-genre").hidden = !credits.genre;
     $("osd-track").classList.add("show");
   }
 

@@ -166,6 +166,19 @@
     text-transform: uppercase;
     overflow-wrap: anywhere;
   }
+  #track-song .feat {
+    font-weight: 400;
+    letter-spacing: 0;
+    opacity: .82;
+  }
+  #track-genre {
+    display: block;
+    margin-top: 4px;
+    font-size: max(13px, 1.8vmin);
+    letter-spacing: .04em;
+    opacity: .72;
+    overflow-wrap: anywhere;
+  }
   #osd-mute {
     top: max(5vh, env(safe-area-inset-top));
     right: 5vw;
@@ -244,7 +257,7 @@
   <div class="layer" id="vignette"></div>
 
   <div class="osd" id="osd-ch"></div>
-  <div class="osd" id="osd-track" role="status" aria-live="polite" aria-atomic="true"><span id="track-artist"></span><span id="track-song"></span><span id="track-detail" hidden></span></div>
+  <div class="osd" id="osd-track" role="status" aria-live="polite" aria-atomic="true"><span id="track-artist"></span><span id="track-song"></span><span id="track-detail" hidden></span><span id="track-genre" hidden></span></div>
   <div class="osd" id="osd-mute">MUTED<br>TAP FOR SOUND</div>
 
   <button id="catcher" aria-label="Turn on sound and show TV controls"></button>
