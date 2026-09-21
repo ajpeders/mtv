@@ -18,6 +18,26 @@ docker exec mtv-sync touch /config/.sync-now   # starts a pass within ~15s
 docker compose logs -f mtv-sync
 ```
 
+## Re-encode the existing library to HEVC
+
+Run once after deploying a sync.sh change that adds the HEVC transcode step
+(see ARCHITECTURE.md → *Codec*). The script is idempotent: already-HEVC files
+are probed and skipped, so it is safe to interrupt and rerun.
+
+```sh
+docker exec mtv-sync /sync.sh transcode-library    # one-pass, ~h/lib
+docker compose logs -f mtv-sync                    # watch progress
+```
+
+The wall-clock cost depends on the library size — `libx265` software encode
+on the mtv-sync container runs roughly at half-realtime per core. If the
+container has 4 cores, a 100-video library averages a few minutes per video
+but they run sequentially. Let it run overnight on a large library.
+
+The original H.264 byte stream is overwritten only on a clean ffmpeg exit; a
+crash mid-transcode (`docker restart mtv-sync`, host OOM, etc.) leaves the
+source intact and the next invocation resumes from where it left off.
+
 ## Check what is on air
 
 The schedule endpoint is available through the LAN/VPN-only admin route:
