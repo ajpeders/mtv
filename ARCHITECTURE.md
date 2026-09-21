@@ -6,9 +6,9 @@ lineup) and `manifest.json` (what is on disk).
 
 ```
 YouTube ──► mtv-sync ──► /videos (mp4 + manifest.json) ──► mtv (nginx) ──► viewer
-                 ▲                                              ▲
-                 │ .sync-now                      channels.json │
-                 └────────── mtv-admin ───────────────────────────┘
+                 ▲  ▲                                           ▲
+         mediaDb ┘  │ .sync-now                   channels.json │
+                    └──────── mtv-admin ──────────────────────────┘
                                   ▲
               Traefik access log ─┘   (viewers panel, read-only)
 ```
@@ -56,6 +56,14 @@ Runs forever in `mtv-sync`, one pass per `SYNC_INTERVAL` (default 6h) or when
 5. Prune videos in no playlist — **skipped entirely if any fetch failed**, so a
    transient YouTube error cannot wipe the library.
 6. Publish the manifest again.
+
+Before each manifest publish, `mtv-sync` reads enriched `music-video` items
+from mediaDb over the internal Docker network. Matching is by YouTube video id;
+artist, canonical track title, album, and year are copied into `manifest.json`.
+The request is best-effort, so a down or incomplete mediaDb falls back to the
+YouTube playlist title without interrupting downloads or playback. The browser
+never calls mediaDb directly, preserving public access to MTV while mediaDb
+remains LAN-only.
 
 Durations come from `ffprobe`, cached in `.durations.json`; they are the only
 input the schedule needs.

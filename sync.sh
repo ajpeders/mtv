@@ -31,6 +31,7 @@ DIR=/videos
 CHANNELS=/config/channels.json
 TRIGGER=/config/.sync-now
 INTERVAL="${SYNC_INTERVAL:-6h}"
+MEDIADB_URL="${MEDIADB_URL-http://mediadb:8090}"
 ARCHIVE="$DIR/.archive"
 UNION=/tmp/union.tsv
 TAB=$(printf '\t')
@@ -129,14 +130,47 @@ manifest() {
   # channels each video belongs to (the player filters client-side)
   set -- /tmp/pl.*.tsv
   [ -e "$1" ] || return 0
-  python3 - "$DIR" "$@" <<'EOF'
+  MEDIADB_URL="$MEDIADB_URL" python3 - "$DIR" "$@" <<'EOF'
 import json, os, subprocess, sys
+from urllib.parse import urlencode
+from urllib.request import urlopen
+
 d = sys.argv[1]
 cachep = os.path.join(d, ".durations.json")
 try:
     cache = json.load(open(cachep))
 except (OSError, ValueError):
     cache = {}
+
+metadata = {}
+base_url = os.environ.get("MEDIADB_URL", "").rstrip("/")
+if base_url:
+    try:
+        offset = 0
+        while True:
+            query = urlencode({"type": "music-video", "limit": 500, "offset": offset})
+            with urlopen(f"{base_url}/api/items?{query}", timeout=5) as response:
+                page = json.load(response)
+            items = page.get("items", [])
+            for item in items:
+                if item.get("enrichment_status") != "enriched":
+                    continue
+                detail = item.get("metadata") or {}
+                source_id = detail.get("source_id") or (item.get("external_ids") or {}).get("youtube")
+                if source_id:
+                    metadata[str(source_id)] = {
+                        "artist": detail.get("artist"),
+                        "track": item.get("title"),
+                        "album": detail.get("album"),
+                        "year": item.get("year"),
+                    }
+            offset += len(items)
+            if not items or offset >= page.get("total", 0):
+                break
+        print(f"[sync] mediadb: metadata for {len(metadata)} music videos")
+    except Exception as error:
+        print(f"[sync] mediadb unavailable, using playlist titles: {error}", file=sys.stderr)
+
 videos = {}    # id -> {id, title, duration}
 channels = {}  # channel num -> [ids]
 for tsv in sys.argv[2:]:
@@ -162,6 +196,7 @@ for tsv in sys.argv[2:]:
             if dur <= 0:
                 continue
             videos[vid] = {"id": vid, "title": title, "duration": dur}
+            videos[vid].update({key: value for key, value in metadata.get(vid, {}).items() if value})
         if vid in videos and vid not in seen:
             seen.add(vid)
             ids.append(vid)

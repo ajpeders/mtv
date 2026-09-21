@@ -120,6 +120,8 @@ def now_playing(ch: int = 1):
             "title": item.get("title", ""),
             "artist": credits["artist"],
             "song": credits["song"],
+            "album": credits["album"],
+            "year": credits["year"],
             "duration": float(item["duration"]),
         }
 

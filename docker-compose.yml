@@ -35,6 +35,7 @@ services:
     entrypoint: ["/bin/sh", "/sync.sh"]
     environment:
       SYNC_INTERVAL: ${MTV_SYNC_INTERVAL:-6h}
+      MEDIADB_URL: ${MTV_MEDIADB_URL-http://mediadb:8090}
     volumes:
       - ./sync.sh:/sync.sh:ro
       - ./app:/app:ro

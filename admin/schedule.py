@@ -74,4 +74,9 @@ def credit(item):
     obj = item if isinstance(item, dict) else {}
     artist = obj.get("artist") or (match.group(1) if match else "")
     song = obj.get("track") or (match.group(2) if match else clean)
-    return {"artist": artist, "song": _QUOTES.sub(r"\1", song)}
+    return {
+        "artist": artist,
+        "song": _QUOTES.sub(r"\1", song),
+        "album": obj.get("album") or "",
+        "year": obj.get("year") or "",
+    }

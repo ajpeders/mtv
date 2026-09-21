@@ -18,6 +18,10 @@ docker exec mtv-sync touch /config/.sync-now   # starts a pass within ~15s
 docker compose logs -f mtv-sync
 ```
 
+The sync log reports how many music videos received metadata from mediaDb. A
+`mediadb unavailable` message is non-fatal; MTV still publishes playlist titles.
+Set `MTV_MEDIADB_URL=` to disable lookup or point it at another internal URL.
+
 ## Re-encode the existing library to HEVC
 
 Run once after deploying a sync.sh change that adds the HEVC transcode step
@@ -46,8 +50,9 @@ The schedule endpoint is available through the LAN/VPN-only admin route:
 curl -s 'https://mtv.thelunadog.com/admin/api/now?ch=1' | python3 -m json.tool
 ```
 
-It reports the current item and offset, the next item, and the public video URL
-base. A 404 means the channel is unknown, empty, or not synced yet.
+It reports the current item and offset, the next item, mediaDb-enriched credits
+(including album and year when available), and the public video URL base. A 404
+means the channel is unknown, empty, or not synced yet.
 
 ## See who is watching
 

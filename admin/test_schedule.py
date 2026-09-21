@@ -111,6 +111,9 @@ class Parity(unittest.TestCase):
         for item in self.manifest["videos"]:
             self.assertEqual(schedule.credit(item), self.js["credits"][item["id"]],
                              item["id"])
+        self.assertEqual(self.js["credits"]["fff666"], {
+            "artist": "Dominic Fike", "song": "Wallflower", "album": "Sunburn", "year": 2023,
+        })
 
     def test_zero_duration_and_unknown_channel(self):
         ids = [item["id"] for item in schedule.schedule_for(self.manifest, 1)]

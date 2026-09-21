@@ -1,6 +1,6 @@
 # Roadmap
 
-## Status (2026-09-19)
+## Status (2026-09-20)
 
 Running in production at `mtv.thelunadog.com`. Player, mirror and admin page
 are all live and stable.
@@ -15,6 +15,8 @@ are all live and stable.
 - Own repo (`alex/mtv`) with CI, deployed by `bin/deploy`.
 - Live lineup is a single channel (`channels.json`: num 1, name "01").
   Multi-channel restore is deliberately deferred — see below.
+- Sync-time mediaDb integration adds canonical artist, song, album, and year to
+  the on-air lower third without making playback depend on mediaDb.
 
 ## Backlog
 
@@ -54,6 +56,9 @@ cross-service work. The 2026-09 backlog is shipped — see History.
 
 ## History
 
+- 2026-09 — mediaDb integration: `mtv-sync` now enriches the manifest from
+  mediaDb by YouTube id. The lower third adds album and year when available and
+  falls back to playlist-title parsing when mediaDb is unavailable.
 - 2026-09 — persistent now-playing credits: the artist/song lower-third no
   longer fades after 8s; it stays pinned while the video is on air and is
   swapped on the next track. The sign-off re-show and its `outroShown`
