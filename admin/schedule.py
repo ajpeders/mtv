@@ -81,7 +81,7 @@ def credit(item):
         "song": _QUOTES.sub(r"\1", song),
         "album": album,
         "year": obj.get("year") or "",
-        "featured": ", ".join(obj.get("featured") or []),
+        "featured": ", ".join(n for n in obj.get("featured") or [] if n.lower() not in artist.lower()),
         "genre": " · ".join((obj.get("genre") or [])[:2]),
         "release": "" if album else _RELEASE.get(obj.get("release_type") or "", ""),
     }

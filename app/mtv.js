@@ -77,7 +77,9 @@
       song: song.replace(/^["“](.*)["”]$/, "$1"),
       album: album,
       year: year,
-      featured: (obj.featured || []).join(", "),
+      featured: (obj.featured || []).filter(function (n) {
+        return artist.toLowerCase().indexOf(n.toLowerCase()) === -1;
+      }).join(", "),
       genre: (obj.genre || []).slice(0, 2).join(" · "),
       release: album ? "" : ({ single: "Single", ep: "EP" })[obj.release_type] || ""
     };
