@@ -15,14 +15,24 @@ are all live and stable.
 - Own repo (`alex/mtv`) with CI, deployed by `bin/deploy`.
 - Live lineup is a single channel (`channels.json`: num 1, name "01").
   Multi-channel restore is deliberately deferred — see below.
-- Sync-time mediaDb integration adds canonical artist, song, album, and year to
-  the on-air lower third without making playback depend on mediaDb.
+- Sync-time mediaDb integration adds canonical artist, song, album, year,
+  featured artists, genre and release type to the on-air lower third without
+  making playback depend on mediaDb (2026-09-21/22). Sync writes `<id>.info.json`
+  sidecars so mediaDb can enrich without YouTube.
 
 ## Backlog
 
-None. Story points for future items (1/2/3/5/8): 1–2 = mechanical, safe
+Story points for future items (1/2/3/5/8): 1–2 = mechanical, safe
 unattended; 3 = needs codebase context; 5–8 = design judgment or
-cross-service work. The 2026-09 backlog is shipped — see History.
+cross-service work.
+
+- **(3) `.sync-now` is ignored during long passes.** The trigger is only read
+  in the sleep between passes, and the one-time HEVC transcode makes a pass
+  take hours, so "Sync now" in the admin page does nothing until it finishes
+  (seen 2026-09-21: had to run the manifest step by hand to publish new
+  mediaDb metadata). Check the trigger between transcodes and, when set,
+  republish the manifest (cheap) before carrying on, or run manifest refresh
+  on its own short timer independent of downloads.
 
 ## Considered and deliberately not done
 
