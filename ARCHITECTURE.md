@@ -78,6 +78,23 @@ trying YouTube, then matches MusicBrainz for album and year, which come back
 here on the next sync. A sidecar MTV didn't write is never overwritten, and
 pruning a video removes its sidecar.
 
+### Playlist channels
+
+Each mediaDb playlist is also a channel. The manifest step reads
+`/api/playlists` and adds one channel per playlist that has local videos. The
+channel number and name go in the manifest's `lineup`, and its videos go in
+`channels`. `source` playlists are skipped because they mirror a YouTube
+playlist that a `channels.json` channel already airs. These channels are
+filters over the library that is already downloaded, so they never download
+or prune anything. The player and `/admin/api/now` append them to
+`channels.json`. `channels.json` wins a number clash.
+
+Playlist channels are numbered after the admin lineup. A playlist keeps its
+number from the previous manifest, so the channel a viewer remembers doesn't
+drift as other playlists come and go. A deleted playlist's number isn't
+reused. It moves only when `channels.json` takes it. If mediaDb is
+unreachable, the previous pass's playlist channels are kept.
+
 Durations come from `ffprobe`, cached in `.durations.json`; they are the only
 input the schedule needs.
 

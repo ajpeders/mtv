@@ -1,6 +1,6 @@
 # Roadmap
 
-## Status (2026-09-20)
+## Status (2026-09-29)
 
 Running in production at `mtv.thelunadog.com`. Player, mirror and admin page
 are all live and stable.
@@ -19,6 +19,9 @@ are all live and stable.
   featured artists, genre and release type to the on-air lower third without
   making playback depend on mediaDb (2026-09-21/22). Sync writes `<id>.info.json`
   sidecars so mediaDb can enrich without YouTube.
+- Playlist channels (2026-09-29): every mediaDb playlist airs as its own
+  channel, numbered after the admin lineup and kept at the same number between
+  syncs. Channels 2+ now exist without YouTube playlist ids.
 
 ## Backlog
 

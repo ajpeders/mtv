@@ -11,6 +11,14 @@ A channel may be saved with an empty playlist; it is skipped by the sync and
 shows "Off air" until you fill it in. Viewers pick up lineup changes on their
 next page load.
 
+## Add a channel from a mediaDb playlist
+
+Nothing to do in mtv. Every mediaDb playlist (except `source` imports) becomes
+a channel on the next manifest publish. `SYNC NOW` runs one, but see the
+ROADMAP note on long passes. Its number and video count appear under
+"MEDIADB PLAYLISTS" on the admin page. To remove the channel, delete the
+playlist in mediaDb.
+
 ## Force a sync without the admin page
 
 ```sh
