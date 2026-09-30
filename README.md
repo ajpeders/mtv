@@ -14,7 +14,42 @@ independent: if mediaDb is unavailable, playlist titles are used instead.
 Each mediaDb playlist also airs as its own channel, numbered after the admin
 lineup.
 
-## Quick start
+## Run it yourself
+
+Any Docker host, one command, no Traefik. `docker-compose.standalone.yml`
+publishes the player **and** `/admin` on one port (default 8080) and keeps
+state in `./data/config` and videos in `./data/videos`.
+
+> **`/admin` has no auth.** Anyone who can reach the port can edit the lineup.
+> Keep it on your LAN (`MTV_PORT=192.168.1.10:8080` binds one address) or put
+> your own authenticating proxy in front.
+
+**Files mode** — air a folder of mp4s, no YouTube involved:
+
+```sh
+mkdir -p data/config data/videos          # create them as yourself (uid 1000 by default)
+cp ~/Music\ Videos/*.mp4 data/videos/     # "Artist - Song.mp4" names give credits
+echo MTV_SOURCE=files > .env
+docker compose -f docker-compose.standalone.yml up -d --build
+```
+
+Every file airs on channel 1; each subfolder of `data/videos` is also its own
+channel. Open `http://<host>:8080/`.
+
+**YouTube mode** (default) — mirror playlists like the homelab does: leave
+`MTV_SOURCE` unset, start the same way, then set each channel's playlist id at
+`http://<host>:8080/admin` and press `SYNC NOW`.
+
+To download YouTube playlists into files mode instead:
+
+```sh
+docker compose -f docker-compose.standalone.yml run --rm mtv-sync fetch PLxxxxxxxx
+```
+
+See [HOWTO.md](HOWTO.md) for folders-as-channels, `playlists.txt` and the other
+settings (`.env.example`). If your user isn't uid 1000, set `MTV_UID`/`MTV_GID`.
+
+## Homelab deploy
 
 ```sh
 cp .env.example .env          # set MTV_DOMAIN, optionally MTV_VIDEOS_PATH
@@ -38,7 +73,7 @@ that passes CI deploys itself.
 | Name | Image | Role |
 |---|---|---|
 | `mtv` | nginx | serves the player and the mirrored mp4s |
-| `mtv-sync` | yt-dlp | mirrors each channel's playlist, enriches and builds `manifest.json` |
+| `mtv-sync` | yt-dlp | mirrors each channel's playlist (or scans the files), enriches and builds `manifest.json` |
 | `mtv-admin` | FastAPI (built here) | `/admin` — lineup, sync trigger, now-playing, viewers |
 
 ## Key commands

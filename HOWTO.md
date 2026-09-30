@@ -11,6 +11,55 @@ A channel may be saved with an empty playlist; it is skipped by the sync and
 shows "Off air" until you fill it in. Viewers pick up lineup changes on their
 next page load.
 
+## Files mode (standalone)
+
+Commands below assume `docker-compose.standalone.yml`; alias it:
+`alias mtvc='docker compose -f docker-compose.standalone.yml'`.
+
+### Add videos
+
+1. Copy `.mp4` files (lower-case extension) into `data/videos/`. H.264 + AAC
+   plays in every browser; HEVC only in Safari/some Chrome.
+2. Name them `Artist - Song.mp4` for credits, or put a `<name>.info.json`
+   beside the file with `title` (and optionally `artist`, `track`, `album`).
+3. `SYNC NOW` on `/admin` (or `mtvc exec mtv-sync touch /config/.sync-now`).
+   Otherwise the folder is rescanned every `MTV_SYNC_INTERVAL` (6h).
+
+A file's id is its path under `data/videos` minus `.mp4` — renaming or
+editing one reshuffles the channels it's on. Replace a file under a *new*
+name: browsers cache `/videos/` for a year.
+
+### Channels from folders
+
+Channel 1 (and any other admin-lineup channel) airs every file. Each
+top-level subfolder is also a channel, named after the folder and numbered
+after the lineup (`CH 02 80s`, ...). Files in deeper folders belong to their
+top-level folder's channel. A folder keeps its number across rescans.
+
+### Download YouTube playlists into the folder
+
+```sh
+mtvc run --rm mtv-sync fetch PLxxxxxxxx                    # into data/videos
+mtvc run --rm mtv-sync fetch --into 80s PLyyyy PLzzzz      # into data/videos/80s = its own channel
+mtvc run --rm mtv-sync fetch 'https://www.youtube.com/watch?v=...'
+```
+
+Each video lands as `<youtube-id>.mp4` (≤1080p H.264+AAC, same format choice
+as the mirror) plus `<youtube-id>.info.json` for the title. Nothing is ever
+deleted; a per-folder `.archive` remembers what was fetched, so a file you
+delete stays deleted (remove its line from `.archive` to fetch it again).
+
+To re-run on every sync pass, list playlists in `data/config/playlists.txt`,
+one per line, optional folder after it:
+
+```
+# playlist-or-url   [folder]
+PLxxxxxxxx
+PLyyyyyyyy          80s
+```
+
+`mtvc run --rm mtv-sync fetch` with no arguments fetches the file once.
+
 ## Add a channel from a mediaDb playlist
 
 Nothing to do in mtv. Every mediaDb playlist (except `source` imports) becomes
@@ -63,6 +112,9 @@ It reports the current item and offset, the next item, mediaDb-enriched credits
 means the channel is unknown, empty, or not synced yet.
 
 ## See who is watching
+
+Homelab only: the panel reads Traefik's access log. The standalone deploy has
+none, so the panel says "no viewer log" — that's expected.
 
 The admin page has a VIEWERS table (last ~24h of page loads, since the Traefik
 log rotates daily). From the host:

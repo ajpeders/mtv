@@ -1,6 +1,11 @@
 # Architecture
 
-Three containers on the shared `web` network, all behind Traefik. There is no
+Three containers on the shared `web` network, all behind Traefik (the
+homelab, `docker-compose.yml`). `docker-compose.standalone.yml` runs the same
+three anywhere: nginx publishes a host port and proxies `/admin` to
+`mtv-admin` itself (`nginx.admin.conf`, pulled in by the `include` in
+`nginx.conf`, which matches nothing on the homelab), state and videos sit in
+`./data/`, mediaDb is off, and there is no viewers log. There is no
 database and no application state beyond two files: `channels.json` (the
 lineup) and `manifest.json` (what is on disk).
 
@@ -40,7 +45,33 @@ Consequences worth knowing:
   schedule order this way (the same "detour" as the player's `#remote` skip)
   and rejoins the clock on a channel change.
 
-## Sync (`sync.sh`)
+## Source modes
+
+`MTV_SOURCE` picks what `mtv-sync` does each pass:
+
+- `youtube` (default, the homelab): mirror each channel's playlist — below.
+- `files`: never mirror or prune. Download anything in
+  `/config/playlists.txt` (optional; additive, see HOWTO), then
+  `files_manifest.py` builds `manifest.json` from every `*.mp4` under
+  `/videos`. The id is the relative path minus `.mp4`, so the `/videos/<id>.mp4`
+  contract holds; the player (`encodeURIComponent`) and the Pi
+  (`quote(id, safe="")`) percent-encode the whole id, `/` included, and nginx
+  decodes it back to the path. Every `channels.json` channel airs everything;
+  each top-level subfolder becomes a manifest `lineup` channel, numbered like
+  the mediaDb playlist channels. Titles come from a `<name>.info.json` sidecar
+  or the file name. Durations are cached in `.durations.files.json` keyed by
+  path+size+mtime, so a replaced file is re-probed. `channels.json` is seeded
+  with one playlist-less channel.
+
+`sync.sh fetch [--into FOLDER] PLAYLIST...` is the one-shot downloader
+(same yt-dlp format string as the mirror, partials kept in `/tmp`, writes
+`<id>.info.json`); files mode also runs it over `playlists.txt` each pass.
+
+The player only uses the YouTube-iframe fallback when some channel has a
+playlist; with none and no manifest it shows NO SIGNAL and reloads every
+minute.
+
+## Sync (`sync.sh`, youtube mode)
 
 Runs forever in `mtv-sync`, one pass per `SYNC_INTERVAL` (default 6h) or when
 `/config/.sync-now` appears. Per pass:
@@ -116,7 +147,8 @@ once and is idempotent: already-HEVC files are probed and skipped.
 
 ## Routing
 
-Both routers match `Host(MTV_DOMAIN)`; `/admin` also matches `PathPrefix`, and
+Homelab (Traefik). The standalone deploy has none of this: `/admin` is open to
+whoever reaches the published port. Both routers match `Host(MTV_DOMAIN)`; `/admin` also matches `PathPrefix`, and
 Traefik prefers it because its rule is longer (default priority = rule length).
 
 - The **player route is deliberately public** — no `local-only`. Friends watch

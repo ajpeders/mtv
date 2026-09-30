@@ -23,6 +23,11 @@ are all live and stable.
   channel, numbered after the admin lineup and kept at the same number between
   syncs. Channels 2+ now exist without YouTube playlist ids.
 
+- Standalone deploy + files mode (2026-09-30, branch `feat/standalone`):
+  `docker-compose.standalone.yml` runs anywhere on one port; `MTV_SOURCE=files`
+  airs a folder of mp4s with subfolders as channels; `sync.sh fetch` downloads
+  YouTube playlists into it. Homelab compose unchanged.
+
 ## Backlog
 
 Story points for future items (1/2/3/5/8): 1–2 = mechanical, safe
@@ -61,6 +66,9 @@ cross-service work.
 
 ## Known limits
 
+- Standalone `/admin` has no auth (LAN or own proxy only) and no viewers log.
+- Files mode: a file replaced under the same name stays browser-cached
+  (`/videos/` is immutable for a year); only lower-case `.mp4` is aired.
 - Viewers panel covers ~24h (the Traefik access log rotates daily).
 - Geolocation depends on an AdGuard allow rule for ip-api.com.
 - Changing a channel's library reshuffles its schedule for everyone at once.
@@ -68,6 +76,11 @@ cross-service work.
   `admin/test_schedule.py` executes both and prevents silent drift.
 
 ## History
+
+- 2026-09-30 — standalone deploy (`docker-compose.standalone.yml`, `/admin`
+  proxied by nginx), files mode (`MTV_SOURCE=files`, `files_manifest.py`) and
+  the `sync.sh fetch` playlist downloader, so others can run MTV without the
+  homelab.
 
 - 2026-09-30 — idle compute: the admin page stops polling while its tab is
   hidden, and the player neither starts in a background tab nor keeps
