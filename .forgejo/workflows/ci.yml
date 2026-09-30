@@ -32,5 +32,6 @@ jobs:
           # checked-in file
           grep -q 'channels.json' app/mtv.js
           test -f admin/Dockerfile
-          python3 -m compileall -q admin
-          (cd admin && /tmp/mtv-venv/bin/python test_schedule.py && /tmp/mtv-venv/bin/python test_now.py)
+          python3 -m compileall -q admin files_manifest.py
+          (cd admin && /tmp/mtv-venv/bin/python test_schedule.py && /tmp/mtv-venv/bin/python test_now.py \
+            && /tmp/mtv-venv/bin/python test_files_manifest.py)
