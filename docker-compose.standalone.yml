@@ -1,0 +1,58 @@
+# Run MTV on any Docker host — no Traefik, no homelab paths:
+#
+#   mkdir -p data/config data/videos
+#   docker compose -f docker-compose.standalone.yml up -d --build
+#
+# Player on http://<host>:${MTV_PORT}/, admin on /admin through the same port.
+# /admin has NO AUTH: publish on your LAN only (MTV_PORT=192.168.1.10:8080
+# binds one address) or put your own authenticating proxy in front.
+# Settings: .env (see .env.example). docker-compose.yml is the homelab deploy.
+services:
+  mtv:
+    security_opt:
+      - no-new-privileges:true
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - ${MTV_PORT:-8080}:80
+    volumes:
+      - ./app:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.admin.conf:/etc/nginx/mtv.d/admin.conf:ro
+      - ${MTV_CONFIG_PATH:-./data/config}:/config:ro
+      - ${MTV_VIDEOS_PATH:-./data/videos}:/usr/share/nginx/html/videos:ro
+
+  # MTV_SOURCE=youtube mirrors the channel playlists (sync.sh);
+  # MTV_SOURCE=files airs whatever mp4s are in the videos dir.
+  # Runs as your user so the videos dir stays yours to add files to.
+  mtv-sync:
+    security_opt:
+      - no-new-privileges:true
+    image: jauderho/yt-dlp:latest
+    restart: unless-stopped
+    user: ${MTV_UID:-1000}:${MTV_GID:-1000}
+    entrypoint: ["/bin/sh", "/sync.sh"]
+    environment:
+      MTV_SOURCE: ${MTV_SOURCE:-youtube}
+      SYNC_INTERVAL: ${MTV_SYNC_INTERVAL:-6h}
+      MEDIADB_URL: ${MTV_MEDIADB_URL:-}
+      # the homelab keeps HEVC for its Pi; browsers other than Safari/Chrome
+      # can't all play it, so H.264 stays by default here
+      HEVC_TRANSCODE: ${MTV_HEVC_TRANSCODE:-0}
+      HOME: /tmp
+    volumes:
+      - ./sync.sh:/sync.sh:ro
+      - ./files_manifest.py:/files_manifest.py:ro
+      - ./app:/app:ro
+      - ${MTV_CONFIG_PATH:-./data/config}:/config
+      - ${MTV_VIDEOS_PATH:-./data/videos}:/videos
+
+  mtv-admin:
+    security_opt:
+      - no-new-privileges:true
+    build: ./admin
+    restart: unless-stopped
+    user: ${MTV_UID:-1000}:${MTV_GID:-1000}
+    volumes:
+      - ${MTV_CONFIG_PATH:-./data/config}:/config
+      - ${MTV_VIDEOS_PATH:-./data/videos}:/videos:ro
