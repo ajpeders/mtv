@@ -73,6 +73,14 @@ def read_json(path):
         return None
 
 
+def playlist_channels(manifest, lineup):
+    """The manifest's mediaDb playlist channels, minus any number channels.json
+    already uses (it wins a clash, as in the player)."""
+    extra = manifest.get("lineup") if isinstance(manifest, dict) else None
+    used = {c.get("num") for c in lineup if isinstance(c, dict)}
+    return [c for c in extra or [] if isinstance(c, dict) and c.get("num") not in used]
+
+
 @app.get("/admin")
 def ui():
     return FileResponse(UI, media_type="text/html")
@@ -101,9 +109,10 @@ def now_playing(ch: int = 1):
     lineup = read_json(CHANNELS)
     if not isinstance(lineup, list):
         return unavailable("channels.json is unreadable")
-    if not any(isinstance(channel, dict) and channel.get("num") == ch for channel in lineup):
-        return unavailable(f"no channel {ch} in the lineup")
     manifest = read_json(MANIFEST)
+    channels = lineup + playlist_channels(manifest, lineup)
+    if not any(isinstance(channel, dict) and channel.get("num") == ch for channel in channels):
+        return unavailable(f"no channel {ch} in the lineup")
     if manifest is None:
         return unavailable("no manifest yet - nothing synced")
     library = schedule.schedule_for(manifest, ch)
@@ -166,14 +175,15 @@ async def put_lineup(request: Request):
 
 @app.get("/admin/api/status")
 def status():
-    lineup = read_json(CHANNELS) or []
+    lineup = read_json(CHANNELS)
+    lineup = lineup if isinstance(lineup, list) else []
     manifest = read_json(MANIFEST) or {}
     vids = manifest.get("videos") or []
     chans = manifest.get("channels") or {}
     dur = {v.get("id"): v.get("duration") or 0 for v in vids if isinstance(v, dict)}
 
     channels = []
-    for ch in lineup:
+    for ch in lineup + playlist_channels(manifest, lineup):
         if not isinstance(ch, dict):
             continue
         ids = chans.get(str(ch.get("num"))) or []
@@ -181,6 +191,7 @@ def status():
             "num": ch.get("num"),
             "name": ch.get("name"),
             "playlist": ch.get("playlist"),
+            "slug": ch.get("slug"),
             "local_count": len(ids),
             "total_duration_s": sum(dur.get(i, 0) for i in ids),
         })

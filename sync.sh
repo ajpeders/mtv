@@ -131,9 +131,9 @@ manifest() {
   # channels each video belongs to (the player filters client-side)
   set -- /tmp/pl.*.tsv
   [ -e "$1" ] || return 0
-  MEDIADB_URL="$MEDIADB_URL" python3 - "$DIR" "$@" <<'EOF'
+  MEDIADB_URL="$MEDIADB_URL" CHANNELS="$CHANNELS" python3 - "$DIR" "$@" <<'EOF'
 import json, os, subprocess, sys
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import urlopen
 
 d = sys.argv[1]
@@ -143,6 +143,14 @@ try:
 except (OSError, ValueError):
     cache = {}
 
+def youtube_id(item):
+    detail = item.get("metadata") or {}
+    return detail.get("source_id") or (item.get("external_ids") or {}).get("youtube")
+
+def mediadb(path):
+    with urlopen(base_url + path, timeout=5) as response:
+        return json.load(response)
+
 metadata = {}
 base_url = os.environ.get("MEDIADB_URL", "").rstrip("/")
 if base_url:
@@ -150,14 +158,13 @@ if base_url:
         offset = 0
         while True:
             query = urlencode({"type": "music-video", "limit": 500, "offset": offset})
-            with urlopen(f"{base_url}/api/items?{query}", timeout=5) as response:
-                page = json.load(response)
+            page = mediadb(f"/api/items?{query}")
             items = page.get("items", [])
             for item in items:
                 if item.get("enrichment_status") != "enriched":
                     continue
                 detail = item.get("metadata") or {}
-                source_id = detail.get("source_id") or (item.get("external_ids") or {}).get("youtube")
+                source_id = youtube_id(item)
                 if source_id:
                     metadata[str(source_id)] = {
                         "artist": detail.get("artist"),
@@ -232,11 +239,59 @@ for tsv in sys.argv[2:]:
             ids.append(vid)
 json.dump(cache, open(cachep + ".tmp", "w"))
 os.replace(cachep + ".tmp", cachep)
+
+# Every mediaDb playlist is a channel too, airing its videos that are local.
+# They're listed in the manifest's "lineup" and numbered after the admin
+# lineup (channels.json). A playlist keeps its number from the previous
+# manifest, so a viewer's remembered channel doesn't drift as playlists come
+# and go. "source" playlists are skipped: they mirror a YouTube playlist that
+# a channels.json channel already airs.
+try:
+    previous = json.load(open(os.path.join(d, "manifest.json"), encoding="utf-8"))
+except (OSError, ValueError):
+    previous = {}
+if not isinstance(previous, dict):   # the old flat-array manifest
+    previous = {}
+playlists = None   # stays None if mediaDb is unreachable: keep last pass's channels
+if base_url:
+    try:
+        playlists = []
+        for p in mediadb("/api/playlists").get("playlists", []):
+            if p.get("kind") == "source":
+                continue
+            items = mediadb("/api/playlists/" + quote(p["slug"], safe="")).get("items", [])
+            playlists.append((p["slug"], p["name"], [youtube_id(item) for item in items]))
+    except Exception as error:
+        playlists = None
+        print(f"[sync] mediadb playlists unavailable, keeping last channels: {error}", file=sys.stderr)
+if playlists is None:
+    playlists = [(c["slug"], c["name"], (previous.get("channels") or {}).get(str(c["num"]), []))
+                 for c in previous.get("lineup") or []]
+try:
+    taken = {c["num"] for c in json.load(open(os.environ["CHANNELS"])) if isinstance(c, dict)}
+except (OSError, ValueError, KeyError, TypeError):
+    taken = set()
+taken |= {int(num) for num in channels}
+sticky = {c["slug"]: c["num"] for c in previous.get("lineup") or []}
+lineup = []
+for slug, name, ids in playlists:
+    ids = list(dict.fromkeys(i for i in ids if i in videos))
+    if not ids:
+        continue
+    num = sticky.get(slug)
+    if num is None or num in taken:
+        num = max(taken | set(sticky.values()), default=0) + 1
+    taken.add(num)
+    lineup.append({"num": num, "name": name, "slug": slug})
+    channels[str(num)] = ids
+lineup.sort(key=lambda c: c["num"])
+
 tmp = os.path.join(d, ".manifest.tmp")
 with open(tmp, "w", encoding="utf-8") as f:
-    json.dump({"videos": list(videos.values()), "channels": channels}, f)
+    json.dump({"videos": list(videos.values()), "channels": channels, "lineup": lineup}, f)
 os.replace(tmp, os.path.join(d, "manifest.json"))
-print(f"[sync] manifest: {len(videos)} local videos across {len(channels)} channels")
+print(f"[sync] manifest: {len(videos)} local videos across {len(channels)} channels"
+      f" ({len(lineup)} from mediaDb playlists)")
 EOF
 }
 

@@ -11,6 +11,8 @@ on YouTube at watch time.
 During each sync, MTV reads enriched music-video metadata from mediaDb and puts
 artist, song, album, and year into the local manifest. Playback remains
 independent: if mediaDb is unavailable, playlist titles are used instead.
+Each mediaDb playlist also airs as its own channel, numbered after the admin
+lineup.
 
 ## Quick start
 

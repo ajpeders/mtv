@@ -67,6 +67,22 @@ class NowEndpoint(unittest.TestCase):
         main.CHANNELS.unlink()
         self.assertEqual(self.client.get("/admin/api/now").status_code, 404)
 
+    def test_playlist_channel_from_manifest(self):
+        manifest = dict(FIXTURE, channels=dict(FIXTURE["channels"], **{"3": ["ccc333", "eee555"]}),
+                        lineup=[{"num": 3, "name": "Dance", "slug": "dance"}])
+        main.MANIFEST.write_text(json.dumps(manifest))
+        body = self.client.get("/admin/api/now?ch=3").json()
+        self.assertIn(body["now"]["id"], ("ccc333", "eee555"))
+        status = self.client.get("/admin/api/status").json()
+        self.assertEqual([(c["num"], c["slug"], c["local_count"]) for c in status["channels"]],
+                         [(1, None, 7), (2, None, 3), (3, "dance", 2)])
+
+    def test_lineup_wins_a_number_clash(self):
+        manifest = dict(FIXTURE, lineup=[{"num": 2, "name": "Dance", "slug": "dance"}])
+        main.MANIFEST.write_text(json.dumps(manifest))
+        status = self.client.get("/admin/api/status").json()
+        self.assertEqual([c["slug"] for c in status["channels"]], [None, None])
+
     def test_empty_channel_404(self):
         manifest = dict(FIXTURE, channels={"1": []})
         main.MANIFEST.write_text(json.dumps(manifest))

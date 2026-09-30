@@ -56,6 +56,11 @@
     <tbody id="rows"></tbody>
   </table></div>
   <div class="row"><button id="add">+ CHANNEL</button><button id="save">SAVE</button><span class="msg" id="save-msg" role="status"></span></div>
+  <h2>MEDIADB PLAYLISTS <small>— ONE CHANNEL EACH, EDIT IN MEDIADB</small></h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>CH</th><th>PLAYLIST</th><th class="r">LOCAL</th><th class="r">HOURS</th></tr></thead>
+    <tbody id="pl-rows"></tbody>
+  </table></div>
 </section>
 <section>
   <h2>SYNC</h2>
@@ -180,7 +185,8 @@
             return c.num;
           });
           var n = 1;
-          while (used.indexOf(n) !== -1) n++;
+          // skip playlist channels' numbers too, so they don't get renumbered
+          while (used.indexOf(n) !== -1 || (statusByNum[n] && statusByNum[n].slug)) n++;
           var tr = makeRow({ num: n, name: "", playlist: "" });
           $("rows").appendChild(tr);
           tr.querySelector(".name").focus();
@@ -254,6 +260,23 @@
               });
               // repaint counts in place — don't clobber unsaved edits in the inputs
               Array.prototype.forEach.call($("rows").children, paintCounts);
+              $("pl-rows").textContent = "";
+              (st.channels || []).forEach(function (c) {
+                if (!c.slug) return;
+                var tr = document.createElement("tr");
+                [
+                  String(c.num).padStart(2, "0"),
+                  c.name,
+                  String(c.local_count),
+                  (c.total_duration_s / 3600).toFixed(1),
+                ].forEach(function (text, i) {
+                  var td = document.createElement("td");
+                  if (i > 1) td.className = "r";
+                  td.textContent = text;
+                  tr.appendChild(td);
+                });
+                $("pl-rows").appendChild(tr);
+              });
               libLine(st.library || {});
               var btn = $("sync");
               btn.disabled = !!st.sync_pending;
@@ -284,10 +307,12 @@
           return "  " + m + ":" + ("0" + sec).slice(-2) + " IN";
         }
         function refreshOnAir() {
-          fetch("/admin/api/lineup")
-            .then(function (r) { return r.ok ? r.json() : []; })
-            .catch(function () { return []; })
-            .then(function (lineup) {
+          // status lists every channel: the lineup plus mediaDb playlist channels
+          fetch("/admin/api/status")
+            .then(function (r) { return r.ok ? r.json() : {}; })
+            .catch(function () { return {}; })
+            .then(function (st) {
+              var lineup = st.channels || [];
               var el = $("onair");
               if (!lineup.length) {
                 el.textContent = "NO CHANNELS CONFIGURED";
@@ -311,7 +336,7 @@
                   var d = document.createElement("div");
                   var channel = document.createElement("span");
                   channel.className = "monitor-channel";
-                  channel.textContent = "CH " + String(ch.num).padStart(2, "0");
+                  channel.textContent = "CH " + String(ch.num).padStart(2, "0") + (ch.slug ? " " + ch.name : "");
                   d.appendChild(channel);
                   var result = results[i];
                   if (result.ok) {

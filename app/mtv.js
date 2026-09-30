@@ -19,7 +19,7 @@
 
   var $ = function (id) { return document.getElementById(id); };
 
-  // ---- channel lineup (channels.json) ----
+  // ---- channel lineup (channels.json + the manifest's mediaDb playlists) ----
   // channel choice is per-device, like a real TV: remembered across reloads,
   // but the broadcast on each channel is the same for every viewer
   var LINEUP = [{ num: 1, name: "", playlist: "" }];
@@ -28,7 +28,9 @@
   function currentCh() { return LINEUP[chIdx]; }
   function chLabel() {
     var c = currentCh();
-    return "CH " + String(c.num).padStart(2, "0");
+    // playlist channels are named after their playlist; channels.json names
+    // are just the number again ("01"), so those stay bare
+    return "CH " + String(c.num).padStart(2, "0") + (c.slug ? " " + c.name : "");
   }
   function saveCh() {
     try { localStorage.setItem("mtv-channel", String(currentCh().num)); } catch (e) {}
@@ -555,6 +557,11 @@
   Promise.all([getJson("channels.json"), getJson("/videos/manifest.json")])
     .then(function (rs) {
       if (rs[0] && rs[0].length) LINEUP = rs[0];
+      // channels.json wins a number clash (sync renumbers on its next pass)
+      var extra = (rs[1] && rs[1].lineup) || [];
+      LINEUP = LINEUP.concat(extra.filter(function (c) {
+        return !LINEUP.some(function (l) { return l.num === c.num; });
+      })).sort(function (a, b) { return a.num - b.num; });
       restoreCh();
       saveCh();
       $("pad-chup").hidden = LINEUP.length < 2;
