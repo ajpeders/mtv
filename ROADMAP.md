@@ -69,6 +69,10 @@ cross-service work.
 
 ## History
 
+- 2026-09-30 — idle compute: the admin page stops polling while its tab is
+  hidden, and the player neither starts in a background tab nor keeps
+  preloading the next video while paused. The server side was already idle
+  (static files; the schedule is clock math in the browser).
 - 2026-09 — mediaDb integration: `mtv-sync` now enriches the manifest from
   mediaDb by YouTube id. The lower third adds album and year when available and
   falls back to playlist-title parsing when mediaDb is unavailable.
