@@ -412,7 +412,12 @@
         tune();
       },
       toggleMute: function () { active.muted = !active.muted; return active.muted; },
-      pause: function () { active.pause(); },
+      pause: function () {
+        active.pause();
+        // stop a half-done preload of the next video too; it's redone near
+        // the end of whatever is on air when the viewer comes back
+        if (prep) { standby.removeAttribute("src"); standby.load(); prep = null; }
+      },
       // a plain tap must never yank the channel — only restart a paused video.
       // Returning to the tab (visibilitychange) ends any detour and rejoins live.
       resume: function (fromVisibility) {
@@ -447,6 +452,9 @@
       },
       detached: isDetached,
     };
+    // opened in a background tab: don't stream until it's actually shown
+    // (visibilitychange then rejoins the live clock)
+    if (document.hidden) return;
     tune();
   }
 

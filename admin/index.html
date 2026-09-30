@@ -407,9 +407,20 @@
         refreshStatus();
         refreshOnAir();
         refreshViewers();
-        setInterval(refreshStatus, 30000);
-        setInterval(refreshOnAir, 10000);
-        setInterval(refreshViewers, 60000);
+        // poll only while someone is looking: a forgotten background tab would
+        // otherwise hit /now for every channel and re-parse the access log forever
+        function whenVisible(fn) {
+          return function () { if (!document.hidden) fn(); };
+        }
+        setInterval(whenVisible(refreshStatus), 30000);
+        setInterval(whenVisible(refreshOnAir), 10000);
+        setInterval(whenVisible(refreshViewers), 60000);
+        document.addEventListener("visibilitychange", function () {
+          if (document.hidden) return;
+          refreshStatus();
+          refreshOnAir();
+          refreshViewers();
+        });
       })();
     </script>
   </body>
