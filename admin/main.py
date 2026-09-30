@@ -207,8 +207,9 @@ def status():
     disk_bytes = 0
     video_count = 0
     try:
-        for p in VIDEOS.iterdir():
-            if p.suffix == ".mp4":
+        # files mode keeps videos in subfolders too
+        for p in VIDEOS.rglob("*.mp4"):
+            if p.is_file():
                 try:
                     disk_bytes += p.stat().st_size
                     video_count += 1
@@ -294,7 +295,9 @@ def geolocate(ips, cache):
 def viewers():
     if not ACCESS_LOG.exists():
         return JSONResponse(
-            {"detail": "no access log mounted — is /traefik-logs wired up?"},
+            # expected without Traefik (the standalone deploy): nginx alone
+            # never sees real client IPs behind a user's own proxy
+            {"detail": "no viewer log — needs Traefik's access log at /traefik-logs"},
             status_code=404)
     rows = {}
     try:

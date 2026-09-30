@@ -278,10 +278,14 @@
       }
     }
 
+    // ids are YouTube ids, or file paths in files mode ("80s/Artist - Song"):
+    // encode the whole id, "/" included — same URL the Pi client builds
+    function srcOf(id) { return "/videos/" + encodeURIComponent(id) + ".mp4"; }
+
     function playItem(it, off) {
       currentId = it.id;
       prep = null;
-      active.src = "/videos/" + it.id + ".mp4";
+      active.src = srcOf(it.id);
       active.load();
       if (off > 1) {
         active.addEventListener("loadedmetadata", function seek() {
@@ -328,7 +332,7 @@
       var nx = expectedNext();
       if (!nx || nx.id === currentId) return;
       prep = nx.id;
-      standby.src = "/videos/" + nx.id + ".mp4";
+      standby.src = srcOf(nx.id);
       standby.load();
     }
 
@@ -577,7 +581,14 @@
       var m = rs[1];
       var vids = m && (m.videos || m);
       var withDur = vids && vids.filter(function (it) { return it.duration > 0; });
-      if (withDur && withDur.length) { startLocal(m); } else { startYouTube(); }
+      if (withDur && withDur.length) { startLocal(m); }
+      // YouTube can only stand in for channels that have a playlist; with
+      // none (files mode, nothing added yet) show no signal and look again
+      else if (LINEUP.some(function (c) { return !!c.playlist; })) { startYouTube(); }
+      else {
+        $("boot").textContent = "NO SIGNAL";
+        setTimeout(function () { location.reload(); }, 60000);
+      }
     });
 
   // ---- remote control ----

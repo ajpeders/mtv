@@ -26,12 +26,25 @@
 # idempotent — already-HEVC files are skipped). Used to convert an existing
 # library after switching to HEVC. Run once per host upgrade; resumes
 # safely across restarts.
+#
+# Files mode (MTV_SOURCE=files): no channel playlists are mirrored or pruned.
+# Each pass downloads anything listed in /config/playlists.txt (optional) and
+# then builds the manifest from whatever mp4s are in $DIR (files_manifest.py).
+#
+# One-shot mode: `sync.sh fetch [--into FOLDER] PLAYLIST...` downloads
+# playlists (URL or id) into $DIR (or $DIR/FOLDER, which files mode airs as
+# its own channel) as <id>.mp4 + <id>.info.json. Nothing is ever deleted.
+# With no PLAYLIST it fetches everything in /config/playlists.txt.
 set -u
 
 DIR=/videos
 CHANNELS=/config/channels.json
 TRIGGER=/config/.sync-now
 INTERVAL="${SYNC_INTERVAL:-6h}"
+SOURCE="${MTV_SOURCE:-youtube}"
+PLAYLISTS=/config/playlists.txt
+# ≤1080p H.264+AAC so the mp4 plays everywhere, Safari included
+FORMAT="bv*[vcodec^=avc1][height<=1080]+ba[acodec^=mp4a]/bv*[height<=1080]+ba/b"
 MEDIADB_URL="${MEDIADB_URL-http://mediadb:8090}"
 ARCHIVE="$DIR/.archive"
 UNION=/tmp/union.tsv
@@ -87,7 +100,60 @@ transcode_one_per_id() {
     transcoded_path "$DIR/$id.mp4"
 }
 
-[ -f "$CHANNELS" ] || cp /app/channels.default.json "$CHANNELS"
+if [ ! -f "$CHANNELS" ]; then
+  if [ "$SOURCE" = files ]; then
+    # one channel, no playlist: it airs every file
+    printf '[\n  { "num": 1, "name": "01", "playlist": "" }\n]\n' > "$CHANNELS"
+  else
+    cp /app/channels.default.json "$CHANNELS"
+  fi
+fi || { echo "[sync] cannot write $CHANNELS - is /config writable?" >&2; exit 1; }
+
+# fetch <folder> <playlist>...
+#   Download playlists (URL or id) into $DIR/<folder> ("" = $DIR itself).
+#   Additive only: a per-folder download archive skips what's already been
+#   fetched, even if you've since deleted the file.
+fetch() {
+  folder="$1"; shift
+  case "$folder" in
+    */*|.*) echo "[fetch] bad folder '$folder' (one plain name, no dots first)" >&2; return 1 ;;
+  esac
+  dest="$DIR${folder:+/$folder}"
+  mkdir -p "$dest" || return 1
+  for pl in "$@"; do
+    case "$pl" in
+      http*) url="$pl" ;;
+      *) url="https://www.youtube.com/playlist?list=$pl" ;;
+    esac
+    echo "[fetch] $pl -> $dest"
+    # partial downloads live in /tmp, so a half-fetched video never shows up
+    # in $DIR; the info.json gives files mode (and mediaDb) the title
+    yt-dlp -f "$FORMAT" --merge-output-format mp4 \
+      -P "$dest" -P temp:/tmp/mtv-fetch -o "%(id)s.%(ext)s" \
+      --write-info-json --no-write-playlist-metafiles \
+      --download-archive "$dest/.archive" \
+      --no-progress --ignore-errors "$url" < /dev/null
+  done
+  if [ "$HEVC_TRANSCODE" = 1 ]; then
+    for f in "$dest"/*.mp4; do
+      [ -e "$f" ] && transcoded_path "$f"
+    done
+  fi
+  return 0
+}
+
+# fetch everything in playlists.txt: one "PLAYLIST [FOLDER]" per line
+fetch_list() {
+  [ -f "$PLAYLISTS" ] || return 0
+  grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$PLAYLISTS" |
+    while read -r pl folder _rest; do
+      fetch "$folder" "$pl"
+    done
+}
+
+files_manifest() {
+  python3 "$(dirname "$0")/files_manifest.py" "$DIR" "$CHANNELS"
+}
 
 # --- one-shot: transcode-library -----------------------------------------
 # Walks every local mp4 and transcodes any that are still H.264 (idempotent:
@@ -104,6 +170,24 @@ if [ "${1:-}" = "transcode-library" ]; then
     echo "[x265] transcode-library: $((n - failed))/$n succeeded"
     [ "$failed" = 0 ]
     exit $?
+fi
+
+# --- one-shot: fetch -------------------------------------------------------
+if [ "${1:-}" = "fetch" ]; then
+  shift
+  folder=""
+  if [ "${1:-}" = "--into" ]; then
+    folder="${2:-}"
+    shift 2 || exit 2
+  fi
+  if [ $# = 0 ]; then
+    [ -f "$PLAYLISTS" ] || { echo "[fetch] no playlists given and no $PLAYLISTS" >&2; exit 2; }
+    fetch_list
+  else
+    fetch "$folder" "$@"
+  fi
+  [ "$SOURCE" = files ] && files_manifest
+  exit 0
 fi
 
 # SYNC_INTERVAL in seconds, for the trigger-aware sleep below
@@ -295,6 +379,33 @@ print(f"[sync] manifest: {len(videos)} local videos across {len(channels)} chann
 EOF
 }
 
+# sleep SYNC_INTERVAL, or until the admin page touches the trigger
+nap() {
+  echo "[sync] sleeping $INTERVAL (or until $TRIGGER appears)"
+  slept=0
+  while [ "$slept" -lt "$INTERVAL_S" ]; do
+    if [ -e "$TRIGGER" ]; then
+      rm -f "$TRIGGER"
+      echo "[sync] sync-now trigger, starting a pass"
+      break
+    fi
+    sleep 15
+    slept=$((slept + 15))
+  done
+}
+
+if [ "$SOURCE" = files ]; then
+  echo "[sync] files mode: airing the mp4s in $DIR"
+  while :; do
+    files_manifest
+    if [ -f "$PLAYLISTS" ]; then
+      fetch_list
+      files_manifest
+    fi
+    nap
+  done
+fi
+
 while :; do
   ok=1
   lineup > /tmp/lineup.tsv
@@ -319,7 +430,7 @@ while :; do
     manifest
     awk -F'\t' '{print "https://youtu.be/" $1}' "$UNION" > /tmp/dl.txt
     yt-dlp \
-      -f "bv*[vcodec^=avc1][height<=1080]+ba[acodec^=mp4a]/bv*[height<=1080]+ba/b" \
+      -f "$FORMAT" \
       --merge-output-format mp4 \
       -o "$DIR/%(id)s.%(ext)s" \
       --download-archive "$ARCHIVE" \
@@ -353,15 +464,5 @@ while :; do
   else
     echo "[sync] no playlist data at all, keeping current library"
   fi
-  echo "[sync] sleeping $INTERVAL (or until $TRIGGER appears)"
-  slept=0
-  while [ "$slept" -lt "$INTERVAL_S" ]; do
-    if [ -e "$TRIGGER" ]; then
-      rm -f "$TRIGGER"
-      echo "[sync] sync-now trigger, starting a pass"
-      break
-    fi
-    sleep 15
-    slept=$((slept + 15))
-  done
+  nap
 done
