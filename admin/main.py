@@ -16,7 +16,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 import schedule
@@ -99,8 +99,10 @@ def get_lineup():
 
 
 @app.get("/admin/api/now")
-def now_playing(ch: int = 1):
-    """Return what channel `ch` is airing at this instant."""
+def now_playing(ch: int = 1, start: str | None = Query(None, alias="from")):
+    """Return what channel `ch` is airing at this instant. With `from=<id>`,
+    that video from the top instead, ignoring the clock: a skip "detour"
+    (the player's #remote skip) walks the schedule order this way."""
     def unavailable(message):
         return JSONResponse({"error": message}, status_code=404)
 
@@ -116,7 +118,13 @@ def now_playing(ch: int = 1):
     if manifest is None:
         return unavailable("no manifest yet - nothing synced")
     library = schedule.schedule_for(manifest, ch)
-    slot = schedule.on_air(library, time.time())
+    if start is not None:
+        index = next((i for i, item in enumerate(library) if item["id"] == start), None)
+        if index is None:
+            return unavailable(f"no video {start} on channel {ch}")
+        slot = {"index": index, "item": library[index], "offset": 0.0}
+    else:
+        slot = schedule.on_air(library, time.time())
     if slot is None:
         return unavailable(f"channel {ch} has no playable videos")
     current = slot["item"]

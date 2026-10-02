@@ -87,3 +87,5 @@ cross-service work.
 - 2026-09 — backlog burn-down: dropped inline `mem_limit`/`memswap_limit`
   lines (the `apps-mem-limits` overlay wins), removed the `#station-bug`
   logo, and scaled the now-playing credits with `vmin` for 4K screens.
+- 2026-10 — `/admin/api/now?from=<id>` so the living-room Pi can skip songs
+  (a detour along the schedule order, like the player's `#remote` skip).

@@ -36,6 +36,9 @@ Consequences worth knowing:
   and compares ordering, wall-clock picks, and credits against Python fixtures.
 - `GET /admin/api/now?ch=N` exposes the current item, offset, and next item to
   the admin panel and the living-room Pi without adding a broadcast process.
+  `&from=<id>` pins `now` to that video at offset 0: the Pi's Skip walks the
+  schedule order this way (the same "detour" as the player's `#remote` skip)
+  and rejoins the clock on a channel change.
 
 ## Sync (`sync.sh`)
 
