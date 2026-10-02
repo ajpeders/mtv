@@ -54,6 +54,17 @@ class NowEndpoint(unittest.TestCase):
         index = order.index(body["now"]["id"])
         self.assertEqual(body["next"]["id"], order[(index + 1) % len(order)])
 
+    def test_from_pins_now_to_that_video(self):
+        order = [item["id"] for item in main.schedule.schedule_for(FIXTURE, 2)]
+        body = self.client.get(f"/admin/api/now?ch=2&from={order[-1]}").json()
+        self.assertEqual(body["now"]["id"], order[-1])
+        self.assertEqual(body["now"]["offset"], 0)
+        self.assertEqual(body["now"]["remaining"], body["now"]["duration"])
+        self.assertEqual(body["next"]["id"], order[0])  # wraps like the broadcast
+
+    def test_from_unknown_video_404(self):
+        self.assertEqual(self.client.get("/admin/api/now?ch=2&from=nope").status_code, 404)
+
     def test_unknown_channel_404(self):
         self.assertEqual(self.client.get("/admin/api/now?ch=9").status_code, 404)
 
