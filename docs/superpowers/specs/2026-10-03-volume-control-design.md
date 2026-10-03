@@ -42,10 +42,11 @@ Local backend (`startLocal`):
 
 YouTube backend:
 
-- `vol(level)`: `player.setVolume(level)`.
+- `vol(level)`: `if (!player.isMuted()) player.setVolume(level)`. The iframe
+  API does not document whether `setVolume` implicitly unmutes, so never call
+  it while muted; the stored level is applied at unmute instead.
 - `toggleMute()`'s unmute branch calls `player.setVolume(volume)` instead of
-  the hard-coded 100.
-- `onReady` applies `player.setVolume(volume)` once before `play()`.
+  the hard-coded 100. That covers first unmute, so `onReady` needs no change.
 
 ### Controls
 
@@ -55,19 +56,28 @@ YouTube backend:
   Styling is inherited from the existing `#pads button` rule; no new CSS.
 - Keys: `-` lowers, `+` and `=` raise. Same guard as the other keys (ignored
   with modifiers or in editable fields).
+- Keys call `e.preventDefault()` like the other handled keys.
 - `volStep(d)` in the shared chrome section:
-  1. `volume = clamp(volume + 10 * d, 0, 100)`, save to localStorage.
-  2. `deck.vol(volume)`.
-  3. If `d > 0` and `muted`, run the same unmute path as the sound tap
+  1. `volume = Math.max(0, Math.min(100, volume + 10 * d))` (no clamp helper
+     exists; inline it), save to localStorage.
+  2. If `d > 0` and `muted`, run the same unmute path as the sound tap
      (`muted = deck.toggleMute()`, update `#osd-mute` and the catcher
-     aria-label).
-  4. Show the level in `#osd-ch` as `VOL ` followed by ten blocks,
-     `▮` for each filled 10% and `▯` for the rest, through the existing
-     `osdTimer` so it hides after 3.5 s like the channel label.
-  5. Call `showPads()` so the strip stays up while stepping.
-- Pad clicks call `e.stopPropagation()` like the neighbouring pads so the tap
-  does not also fire the catcher.
+     aria-label). This runs before step 3 so the YouTube `vol` guard sees
+     the player unmuted.
+  3. `deck.vol(volume)`.
+  4. Show the level in `#osd-ch`: set `textContent` to `VOL ` followed by ten
+     blocks (`▮` per filled 10%, `▯` for the rest), add `show`,
+     `clearTimeout(osdTimer)`, `osdTimer = setTimeout(remove show, 3500)`.
+     `showOsd()` cannot be reused because it overwrites the text with the
+     channel label.
+- `volStep` has no pad chrome in it. The two pad click handlers call
+  `e.stopPropagation()`, `volStep(±1)`, `showPads()`, mirroring the CH pads;
+  the keys call `volStep` only, like ArrowUp/Down.
 - Before `deck` exists, presses are ignored (same as `chStep`).
+- Intended edge behaviour, not to be "fixed": VOL + at 100 while muted still
+  unmutes (level unchanged). Volume 0 while unmuted is silent with no MUTED
+  overlay, and a tap does nothing audible; that follows from the mute
+  semantics being untouched.
 
 ### iOS
 
@@ -77,8 +87,10 @@ iOS Safari ignores `HTMLMediaElement.volume` and the YouTube iframe's
 - `IOS = /iP(hone|ad|od)/.test(navigator.platform) || (navigator.platform ===
   "MacIntel" && navigator.maxTouchPoints > 1)` (the second clause is iPadOS
   pretending to be a Mac).
-- When `IOS` is true, both VOL pads get the `hidden` attribute at startup and
-  `volStep` returns immediately. Everything else is unchanged.
+- When `IOS` is true, both VOL pads get the `hidden` attribute at startup
+  (module-level, next to the existing `pad-skip` display rule in the remote
+  control section) and `volStep` returns immediately. Everything else is
+  unchanged.
 
 ### Cache
 
