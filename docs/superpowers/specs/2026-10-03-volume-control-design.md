@@ -99,10 +99,17 @@ Markup in `index.html`, after `#osd-mute`:
   only while it shows; no logic change to credits). On narrow screens it
   follows the same `@media (max-width: 600px)` offsets as `#osd-track`.
 - Look: `#vol-label` in VT323 phosphor green with the existing text-shadow
-  glow, letter-spaced. `#vol-bar` is a flex row, gap 4px. Each `<i>` is a
-  block about 3.2vw wide (clamped 18–44px) and 1.6vw tall (clamped 10–22px),
-  `border: 1px solid var(--phosphor-dim)`, transparent fill. `.lit` fills
-  with `var(--phosphor)` and `box-shadow: 0 0 8px var(--phosphor-dim)`.
+  glow, letter-spaced. `#vol-bar` is a horizontal flex row, gap 4px,
+  `align-items: flex-end`, so the segments sit on one baseline. The segments
+  ramp: segment n (1–10, left to right) is `n * 10%` of the full height, so
+  the first is a short stub and the tenth is the tallest, and the lit part
+  climbs as the volume rises. Each `<i>` is about 2.6vw wide (clamped
+  14–36px); full height is 3.6vw (clamped 24–56px), set via
+  `#vol-bar i:nth-child(n) { height: calc(var(--vol-h) * n / 10); }`
+  with `--vol-h` on `#vol-bar`. Unlit: `border: 1px solid
+  var(--phosphor-dim)`, transparent fill. `.lit`: filled with
+  `var(--phosphor)` and `box-shadow: 0 0 8px var(--phosphor-dim)`. Same
+  green as the rest of the site; no other colour is introduced.
 - Fades with the shared `.osd` opacity transition; identical in both
   picture modes.
 
