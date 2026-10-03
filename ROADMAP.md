@@ -23,7 +23,7 @@ are all live and stable.
   channel, numbered after the admin lineup and kept at the same number between
   syncs. Channels 2+ now exist without YouTube playlist ids.
 
-- Standalone deploy + files mode (2026-09-30, branch `feat/standalone`):
+- Standalone deploy + files mode (live 2026-10-02, 5b50050):
   `docker-compose.standalone.yml` runs anywhere on one port; `MTV_SOURCE=files`
   airs a folder of mp4s with subfolders as channels; `sync.sh fetch` downloads
   YouTube playlists into it. Homelab compose unchanged.
@@ -41,6 +41,13 @@ cross-service work.
   mediaDb metadata). Check the trigger between transcodes and, when set,
   republish the manifest (cheap) before carrying on, or run manifest refresh
   on its own short timer independent of downloads.
+
+- **(1) Verify standalone files mode in a real browser.** The 2026-09-30
+  check was curl-only (player, manifest, `/admin/api/now`, video URLs incl.
+  `%2F` subfolder ids). Play a subfolder channel with `&`/`#` in a filename.
+- **(1) Verify `fetch` with a bare playlist id.** Only a single-video URL
+  was tested; the playlist URL format is the one the mirror already uses.
+- **(1) favicon.** `/favicon.ico` 404s on every page load (console noise).
 
 ## Considered and deliberately not done
 
