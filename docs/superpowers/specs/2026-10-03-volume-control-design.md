@@ -1,4 +1,4 @@
-# Volume control for the MTV web player
+# Volume control and CRT toggle for the MTV web player
 
 Date: 2026-10-03. Repo: `alex/mtv`, files `app/mtv.js`, `app/index.html`.
 
@@ -25,7 +25,8 @@ look and a plain ("regular") picture.
 
 - `volume`: integer 0–100, module-level in `mtv.js`, default 100.
 - Loaded once at startup from `localStorage["mtv-volume"]`, parsed with
-  `parseInt`, clamped to 0–100; anything unparsable falls back to 100.
+  `parseInt`, rounded to a multiple of 10 and clamped to 0–100 so the bar
+  and the level always agree; anything unparsable falls back to 100.
   Saved on every change. Access is wrapped in `try/catch` exactly like the
   existing `mtv-channel` key (private mode can throw).
 - `muted` is unchanged and still not persisted.
@@ -94,19 +95,23 @@ Markup in `index.html`, after `#osd-mute`:
 
 - Ten `<i>` segments, one per 10% step. `showVol()` toggles class `lit` on
   the first `volume / 10` of them.
-- Position: fixed, same left edge and bottom offset as `#osd-track` so it
-  sits where the song credits sit (they are hidden by the bar's `z-index`
-  only while it shows; no logic change to credits). On narrow screens it
-  follows the same `@media (max-width: 600px)` offsets as `#osd-track`.
-- Look: `#vol-label` in VT323 phosphor green with the existing text-shadow
-  glow, letter-spaced. `#vol-bar` is a horizontal flex row, gap 4px,
+- Position: bottom-right, `right: 5vw` and the same bottom offset as
+  `#osd-track`. The credits live bottom-left (max-width 70vw) and nothing
+  else uses that corner, so the two never overlap and the credits need no
+  logic change. The block is right-aligned (label above the row, both
+  flush right).
+- Look: `#vol-label` in VT323 phosphor green with `#osd-ch`'s glow
+  (`text-shadow: 0 0 8px var(--phosphor-dim), 2px 2px 0 #000`),
+  letter-spaced. `#vol-bar` is a horizontal flex row, gap 4px,
   `align-items: flex-end`, so the segments sit on one baseline. The segments
   ramp: segment n (1–10, left to right) is `n * 10%` of the full height, so
   the first is a short stub and the tenth is the tallest, and the lit part
   climbs as the volume rises. Each `<i>` is about 2.6vw wide (clamped
-  14–36px); full height is 3.6vw (clamped 24–56px), set via
-  `#vol-bar i:nth-child(n) { height: calc(var(--vol-h) * n / 10); }`
-  with `--vol-h` on `#vol-bar`. Unlit: `border: 1px solid
+  14–36px); full height `--vol-h` is 3.6vw (clamped 24–56px), set on
+  `#vol-bar`, with ten explicit rules `#vol-bar i:nth-child(k) { height:
+  calc(var(--vol-h) * k / 10); }` for k = 1..10 (CSS has no `n` inside
+  `calc`). `#osd-vol` is a column flexbox so the label stacks above the
+  row. Unlit: `border: 1px solid
   var(--phosphor-dim)`, transparent fill. `.lit`: filled with
   `var(--phosphor)` and `box-shadow: 0 0 8px var(--phosphor-dim)`. Same
   green as the rest of the site; no other colour is introduced.
@@ -116,8 +121,9 @@ Markup in `index.html`, after `#osd-mute`:
 ### CRT / regular picture toggle
 
 - `crt`: boolean, default `true`, stored as `"1"`/`"0"` in
-  `localStorage["mtv-crt"]` with the same try/catch pattern. Loaded at
-  startup before the boot screen is removed, so there is no flash.
+  `localStorage["mtv-crt"]` with the same try/catch pattern. Load rule:
+  `crt = stored !== "0"`, so missing or garbage values mean CRT on. Loaded
+  at startup before the boot screen is removed, so there is no flash.
 - `applyCrt()`: `document.body.classList.toggle("plain", !crt)` and sets the
   pad label to `CRT ON` / `CRT OFF`.
 - CSS, next to the CRT layers:
@@ -125,9 +131,14 @@ Markup in `index.html`, after `#osd-mute`:
   - `.plain .screen { transform: translate(-50%, -50%); }` removes the 1.12
     overscan zoom for local video. `#player` (the YouTube iframe) keeps its
     zoom: that crop is what hides YouTube's logo and title bar.
-  - `#static`, `.osd`, fonts and colours are unchanged in `.plain`.
+  - `#static`, `.osd`, fonts and colours are unchanged in `.plain`. So is
+    `object-fit: cover`: plain mode removes the overscan zoom only, it does
+    not letterbox. On screens far from 16:9 the picture is still cropped to
+    fill; that is a deliberate "same framing, clean glass" choice.
 - Pad `<button id="pad-crt" aria-label="toggle CRT picture">CRT ON</button>`
-  after FULL. Click: `e.stopPropagation()`, `toggleCrt()`, `showPads()`.
+  after FULL. Unlike the other pads, its label shows the current state
+  (`CRT ON` means the CRT look is on), like the switch on a set; this is
+  intended. Click: `e.stopPropagation()`, `toggleCrt()`, `showPads()`.
   Key `c` calls `toggleCrt()` with `preventDefault()`.
 - `toggleCrt()`: flip `crt`, save, `applyCrt()`, `staticBurst(250)` so the
   switch feels like a set being retuned.
@@ -156,12 +167,14 @@ iOS Safari ignores `HTMLMediaElement.volume` and the YouTube iframe's
 - `deck.vol` missing (should not happen, both backends implement it): guarded
   with `deck.vol &&` like `deck.pip`.
 - Out-of-range stored value: clamped on load.
+- `mtv-crt` missing or garbage: CRT on; `localStorage` unavailable: the
+  toggle works for the session only.
 
 ## Verification (manual; there is no JS test harness)
 
 Desktop Chrome, local backend:
-1. Tap for sound, press VOL − three times: OSD shows `VOL ▮▮▮▮▮▮▮▯▯▯`,
-   audio is audibly quieter, `localStorage["mtv-volume"]` is `70`.
+1. Tap for sound, press VOL − three times: the bar shows 7 of 10 segments
+   lit, audio is audibly quieter, `localStorage["mtv-volume"]` is `70`.
 2. Reload: first video plays at 70% once unmuted.
 3. Wait for a track change (or skip via `/#remote`): level stays 70%.
 4. Press `m` to mute, then VOL +: sound returns at 80%, MUTED overlay gone.
@@ -173,8 +186,8 @@ instance): steps 1 and 4 behave the same.
 iPhone Safari: the strip shows CH/SKIP/FULL/CRT/PIP/CAST but no VOL pads.
 
 Volume bar and CRT toggle, desktop Chrome:
-6. VOL − shows the bar with 7 of 10 segments lit, label `VOLUME`, gone
-   after 2 s; the song credits are back afterwards.
+6. VOL − shows the bar bottom-right with label `VOLUME`, clear of the
+   credits bottom-left, gone after 2 s.
 7. Press `CRT ON`: scanlines, vignette and hum disappear, the picture is no
    longer zoomed, the pad reads `CRT OFF`, a static burst plays. Reload: still
    plain, `localStorage["mtv-crt"]` is `"0"`. Press again: CRT look returns.
@@ -183,5 +196,6 @@ Volume bar and CRT toggle, desktop Chrome:
 
 ## Docs
 
-- ROADMAP.md: status bullet under "Status" for the player controls.
+- ROADMAP.md: status bullet under "Status" for volume control, the bar and
+  the CRT/regular toggle.
 - README.md: no change (it documents URLs, not keys).
