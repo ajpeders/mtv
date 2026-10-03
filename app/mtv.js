@@ -13,7 +13,18 @@
   // skip is remote-holder-only: open the page as /#remote to get it
   var CAN_SKIP = location.hash === "#remote";
   var muted = true;
+  // sound level and picture mode are per-device, like the channel: a TV
+  // remembers how loud you left it. Mute is not — every load starts muted.
+  var volume = 100;
+  try { volume = parseInt(localStorage.getItem("mtv-volume"), 10); } catch (e) {}
+  if (isNaN(volume)) volume = 100;
+  volume = Math.max(0, Math.min(100, Math.round(volume / 10) * 10));
+  var crt = true;
+  try { crt = localStorage.getItem("mtv-crt") !== "0"; } catch (e) {}
+  // iOS gives pages no say over media volume (hardware buttons only)
+  var IOS = /iP(hone|ad|od)/.test(navigator.platform) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   var osdTimer = null;
+  var volTimer = null;
   var padsTimer = null;
   var credits = null;
 
@@ -154,6 +165,40 @@
     deck.next();
   }
 
+  function setMuted(m) {
+    muted = m;
+    $("osd-mute").classList.toggle("show", muted);
+    $("catcher").setAttribute("aria-label", muted ? "Turn on sound and show TV controls" : "Show song credits and TV controls");
+  }
+  function showVol() {
+    var segs = $("vol-bar").children;
+    for (var i = 0; i < segs.length; i++) segs[i].classList.toggle("lit", i < volume / 10);
+    $("osd-vol").classList.add("show");
+    clearTimeout(volTimer);
+    volTimer = setTimeout(function () { $("osd-vol").classList.remove("show"); }, 2000);
+  }
+  // one notch = 10%. Turning it up while muted also unmutes, like a TV; that
+  // runs first so the YouTube backend's vol() sees an unmuted player
+  function volStep(d) {
+    if (!deck || IOS) return;
+    volume = Math.max(0, Math.min(100, volume + 10 * d));
+    try { localStorage.setItem("mtv-volume", String(volume)); } catch (e) {}
+    if (d > 0 && muted) setMuted(deck.toggleMute());
+    if (deck.vol) deck.vol(volume);
+    showVol();
+  }
+  function applyCrt() {
+    document.body.classList.toggle("plain", !crt);
+    $("pad-crt").textContent = crt ? "CRT ON" : "CRT OFF";
+  }
+  function toggleCrt() {
+    crt = !crt;
+    try { localStorage.setItem("mtv-crt", crt ? "1" : "0"); } catch (e) {}
+    applyCrt();
+    staticBurst(250);
+  }
+  applyCrt();
+
   // ---- local backend: deterministic broadcast over the synced files ----
   function startLocal(manifest0) {
     var EPOCH = 365472000; // 1981-08-01, MTV sign-on. Any fixed constant works.
@@ -244,6 +289,7 @@
       v.setAttribute("muted", "");
       v.setAttribute("playsinline", "");
       v.muted = true;
+      v.volume = volume / 100;
       v.preload = "auto";
       v.setAttribute("x-webkit-airplay", "allow");
       return v;
@@ -341,6 +387,7 @@
       active = standby;
       standby = old;
       active.muted = old.muted;
+      active.volume = old.volume;
       active.classList.add("on");
       old.classList.remove("on");
       old.pause();
@@ -416,6 +463,7 @@
         tune();
       },
       toggleMute: function () { active.muted = !active.muted; return active.muted; },
+      vol: function (level) { active.volume = level / 100; },
       pause: function () {
         active.pause();
         // stop a half-done preload of the next video too; it's redone near
@@ -522,9 +570,12 @@
                 showOsd(null);
               },
               toggleMute: function () {
-                if (player.isMuted()) { player.unMute(); player.setVolume(100); return false; }
+                if (player.isMuted()) { player.unMute(); player.setVolume(volume); return false; }
                 player.mute(); return true;
               },
+              // the iframe API doesn't say whether setVolume unmutes, so
+              // never call it muted; the level is applied at unmute above
+              vol: function (level) { if (!player.isMuted()) player.setVolume(level); },
               pause: function () { player.pauseVideo(); },
               resume: function () { player.playVideo(); },
               fullscreen: function () {
@@ -593,13 +644,10 @@
 
   // ---- remote control ----
   if (!CAN_SKIP) $("pad-skip").style.display = "none";
+  if (IOS) { $("pad-voldn").hidden = true; $("pad-volup").hidden = true; }
   $("catcher").addEventListener("click", function () {
     if (!deck) return;
-    if (muted) {
-      muted = deck.toggleMute();
-      $("osd-mute").classList.toggle("show", muted);
-      $("catcher").setAttribute("aria-label", "Show song credits and TV controls");
-    }
+    if (muted) setMuted(deck.toggleMute());
     showOsd(null);
     // the tap is a user gesture: also kick playback, so a device that refused
     // autoplay (iOS Low Power Mode etc.) starts on the same press that unmutes
@@ -610,7 +658,10 @@
   $("pad-skip").addEventListener("click", function (e) { e.stopPropagation(); skip(); showPads(); });
   $("pad-chup").addEventListener("click", function (e) { e.stopPropagation(); chStep(1); showPads(); });
   $("pad-chdn").addEventListener("click", function (e) { e.stopPropagation(); chStep(-1); showPads(); });
+  $("pad-voldn").addEventListener("click", function (e) { e.stopPropagation(); volStep(-1); showPads(); });
+  $("pad-volup").addEventListener("click", function (e) { e.stopPropagation(); volStep(1); showPads(); });
   $("pad-full").addEventListener("click", function (e) { e.stopPropagation(); deck && deck.fullscreen(); });
+  $("pad-crt").addEventListener("click", function (e) { e.stopPropagation(); toggleCrt(); showPads(); });
   $("pad-pip").addEventListener("click", function (e) { e.stopPropagation(); deck && deck.pip && deck.pip(); });
   $("pad-cast").addEventListener("click", function (e) { e.stopPropagation(); deck && deck.cast && deck.cast(); });
   $("catcher").addEventListener("dblclick", function () { deck && deck.fullscreen(); });
@@ -620,12 +671,10 @@
     if (e.key === "ArrowUp" && LINEUP.length > 1) { e.preventDefault(); chStep(1); }
     if (e.key === "ArrowDown" && LINEUP.length > 1) { e.preventDefault(); chStep(-1); }
     if (e.key.toLowerCase() === "f") { e.preventDefault(); if (deck) deck.fullscreen(); }
-    if (e.key.toLowerCase() === "m" && deck) {
-      e.preventDefault();
-      muted = deck.toggleMute();
-      $("osd-mute").classList.toggle("show", muted);
-      $("catcher").setAttribute("aria-label", muted ? "Turn on sound and show TV controls" : "Show song credits and TV controls");
-    }
+    if (e.key.toLowerCase() === "c") { e.preventDefault(); toggleCrt(); }
+    if (e.key === "-") { e.preventDefault(); volStep(-1); }
+    if (e.key === "+" || e.key === "=") { e.preventDefault(); volStep(1); }
+    if (e.key.toLowerCase() === "m" && deck) { e.preventDefault(); setMuted(deck.toggleMute()); }
   });
 
   // only run the stream when someone is actually watching: a hidden tab

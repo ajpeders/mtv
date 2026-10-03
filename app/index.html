@@ -83,6 +83,11 @@
     to   { background-position: 0 130vh; }
   }
 
+  /* "regular" picture: no tube artefacts, no overscan on local video. The
+     YouTube iframe keeps its zoom — that crop is what hides YouTube's logo
+     and title bar, not a CRT effect. */
+  .plain #scanlines, .plain #vignette, .plain #hum { display: none; }
+  .plain .screen { transform: translate(-50%, -50%); }
   /* ---- static burst on channel flip ---- */
   #static {
     opacity: 0;
@@ -189,6 +194,41 @@
     color: #f5f5edb3;
     text-shadow: 1px 2px 2px #000;
   }
+  /* old-school TV volume bar: ten green segments, each taller than the last,
+     lit from the left as the level rises */
+  #osd-vol {
+    right: 5vw;
+    bottom: max(8vh, calc(env(safe-area-inset-bottom) + 20px));
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  }
+  #vol-label {
+    font-size: clamp(18px, 2.6vmin, 30px);
+    line-height: 1;
+    letter-spacing: .12em;
+    text-shadow: 0 0 8px var(--phosphor-dim), 2px 2px 0 #000;
+  }
+  #vol-bar {
+    --vol-h: clamp(24px, 3.6vw, 56px);
+    display: flex; align-items: flex-end; gap: 4px;
+  }
+  #vol-bar i {
+    display: block;
+    width: clamp(14px, 2.6vw, 36px);
+    border: 1px solid var(--phosphor-dim);
+    background: transparent;
+    box-shadow: 1px 2px 0 #000;
+  }
+  #vol-bar i.lit { background: var(--phosphor); box-shadow: 0 0 8px var(--phosphor-dim), 1px 2px 0 #000; }
+  #vol-bar i:nth-child(1)  { height: calc(var(--vol-h) * 1 / 10); }
+  #vol-bar i:nth-child(2)  { height: calc(var(--vol-h) * 2 / 10); }
+  #vol-bar i:nth-child(3)  { height: calc(var(--vol-h) * 3 / 10); }
+  #vol-bar i:nth-child(4)  { height: calc(var(--vol-h) * 4 / 10); }
+  #vol-bar i:nth-child(5)  { height: calc(var(--vol-h) * 5 / 10); }
+  #vol-bar i:nth-child(6)  { height: calc(var(--vol-h) * 6 / 10); }
+  #vol-bar i:nth-child(7)  { height: calc(var(--vol-h) * 7 / 10); }
+  #vol-bar i:nth-child(8)  { height: calc(var(--vol-h) * 8 / 10); }
+  #vol-bar i:nth-child(9)  { height: calc(var(--vol-h) * 9 / 10); }
+  #vol-bar i:nth-child(10) { height: var(--vol-h); }
 
   /* The remote appears only on a tap and disappears after four seconds. */
   #catcher {
@@ -259,19 +299,26 @@
   <div class="osd" id="osd-ch"></div>
   <div class="osd" id="osd-track" role="status" aria-live="polite" aria-atomic="true"><span id="track-artist"></span><span id="track-song"></span><span id="track-detail" hidden></span><span id="track-genre" hidden></span></div>
   <div class="osd" id="osd-mute">MUTED<br>TAP FOR SOUND</div>
+  <div class="osd" id="osd-vol" aria-hidden="true">
+    <span id="vol-label">VOLUME</span>
+    <span id="vol-bar"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+  </div>
 
   <button id="catcher" aria-label="Turn on sound and show TV controls"></button>
   <div id="pads" aria-label="TV controls" aria-hidden="true" inert>
     <button id="pad-chup" hidden aria-label="channel up">CH ▲</button>
     <button id="pad-chdn" hidden aria-label="channel down">CH ▼</button>
     <button id="pad-skip" aria-label="skip video">SKIP</button>
+    <button id="pad-voldn" aria-label="volume down">VOL −</button>
+    <button id="pad-volup" aria-label="volume up">VOL +</button>
     <button id="pad-full" aria-label="fullscreen">FULL</button>
+    <button id="pad-crt" aria-label="toggle CRT picture">CRT ON</button>
     <button id="pad-pip" hidden aria-label="picture in picture">PIP</button>
     <button id="pad-cast" hidden aria-label="airplay">CAST</button>
   </div>
 
   <div id="boot">TUNING…</div>
 
-  <script src="mtv.js?v=10"></script>
+  <script src="mtv.js?v=11"></script>
 </body>
 </html>

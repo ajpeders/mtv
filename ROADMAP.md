@@ -23,6 +23,13 @@ are all live and stable.
   channel, numbered after the admin lineup and kept at the same number between
   syncs. Channels 2+ now exist without YouTube playlist ids.
 
+- Volume control + CRT toggle (2026-10-03): `VOL −`/`VOL +` pads and `-`/`+`
+  keys in 10% steps, remembered per device, shown as an old-school
+  bottom-right bar of ten rising green segments; `VOL +` while muted unmutes.
+  Hidden on iOS, where pages cannot set media volume. A `CRT ON/OFF` pad
+  (key `c`) switches to a plain picture: no scanlines, vignette, hum or
+  overscan zoom (the YouTube iframe keeps its zoom to crop YouTube's chrome).
+  Spec: `docs/superpowers/specs/2026-10-03-volume-control-design.md`.
 - Standalone deploy + files mode (live 2026-10-02, 5b50050):
   `docker-compose.standalone.yml` runs anywhere on one port; `MTV_SOURCE=files`
   airs a folder of mp4s with subfolders as channels; `sync.sh fetch` downloads
