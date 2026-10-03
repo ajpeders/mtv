@@ -6,12 +6,16 @@ Date: 2026-10-03. Repo: `alex/mtv`, files `app/mtv.js`, `app/index.html`.
 
 Viewers can turn the sound up and down from the on-screen TV controls and the
 keyboard, in both playback backends, and the level survives a reload on that
-device. Today the player only has mute/unmute.
+device. Today the player only has mute/unmute. The level is shown as an
+old-school TV volume bar, and a toggle switches the picture between the CRT
+look and a plain ("regular") picture.
 
 ## Non-goals
 
 - No slider, no fine-grained control: 10% steps only.
 - No change to the mute semantics ("MUTED / TAP FOR SOUND" on first load).
+- Regular mode keeps the green VT323 OSD, the static burst on channel change
+  and the volume bar. It is a clean picture, not a different player.
 - No admin, sync, or Pi (outpost) changes. TV-set volume via CEC is a
   separate project.
 
@@ -65,11 +69,9 @@ YouTube backend:
      aria-label). This runs before step 3 so the YouTube `vol` guard sees
      the player unmuted.
   3. `deck.vol(volume)`.
-  4. Show the level in `#osd-ch`: set `textContent` to `VOL ` followed by ten
-     blocks (`▮` per filled 10%, `▯` for the rest), add `show`,
-     `clearTimeout(osdTimer)`, `osdTimer = setTimeout(remove show, 3500)`.
-     `showOsd()` cannot be reused because it overwrites the text with the
-     channel label.
+  4. `showVol()`: fill the bar (below), add `show` to `#osd-vol`,
+     `clearTimeout(volTimer)`, `volTimer = setTimeout(remove show, 2000)`.
+     `#osd-ch` and `showOsd()` are not touched.
 - `volStep` has no pad chrome in it. The two pad click handlers call
   `e.stopPropagation()`, `volStep(±1)`, `showPads()`, mirroring the CH pads;
   the keys call `volStep` only, like ArrowUp/Down.
@@ -78,6 +80,51 @@ YouTube backend:
   unmutes (level unchanged). Volume 0 while unmuted is silent with no MUTED
   overlay, and a tap does nothing audible; that follows from the mute
   semantics being untouched.
+
+### Volume bar OSD
+
+Markup in `index.html`, after `#osd-mute`:
+
+```html
+<div class="osd" id="osd-vol" aria-hidden="true">
+  <span id="vol-label">VOLUME</span>
+  <span id="vol-bar"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+</div>
+```
+
+- Ten `<i>` segments, one per 10% step. `showVol()` toggles class `lit` on
+  the first `volume / 10` of them.
+- Position: fixed, same left edge and bottom offset as `#osd-track` so it
+  sits where the song credits sit (they are hidden by the bar's `z-index`
+  only while it shows; no logic change to credits). On narrow screens it
+  follows the same `@media (max-width: 600px)` offsets as `#osd-track`.
+- Look: `#vol-label` in VT323 phosphor green with the existing text-shadow
+  glow, letter-spaced. `#vol-bar` is a flex row, gap 4px. Each `<i>` is a
+  block about 3.2vw wide (clamped 18–44px) and 1.6vw tall (clamped 10–22px),
+  `border: 1px solid var(--phosphor-dim)`, transparent fill. `.lit` fills
+  with `var(--phosphor)` and `box-shadow: 0 0 8px var(--phosphor-dim)`.
+- Fades with the shared `.osd` opacity transition; identical in both
+  picture modes.
+
+### CRT / regular picture toggle
+
+- `crt`: boolean, default `true`, stored as `"1"`/`"0"` in
+  `localStorage["mtv-crt"]` with the same try/catch pattern. Loaded at
+  startup before the boot screen is removed, so there is no flash.
+- `applyCrt()`: `document.body.classList.toggle("plain", !crt)` and sets the
+  pad label to `CRT ON` / `CRT OFF`.
+- CSS, next to the CRT layers:
+  - `.plain #scanlines, .plain #vignette, .plain #hum { display: none; }`
+  - `.plain .screen { transform: translate(-50%, -50%); }` removes the 1.12
+    overscan zoom for local video. `#player` (the YouTube iframe) keeps its
+    zoom: that crop is what hides YouTube's logo and title bar.
+  - `#static`, `.osd`, fonts and colours are unchanged in `.plain`.
+- Pad `<button id="pad-crt" aria-label="toggle CRT picture">CRT ON</button>`
+  after FULL. Click: `e.stopPropagation()`, `toggleCrt()`, `showPads()`.
+  Key `c` calls `toggleCrt()` with `preventDefault()`.
+- `toggleCrt()`: flip `crt`, save, `applyCrt()`, `staticBurst(250)` so the
+  switch feels like a set being retuned.
+- Works before `deck` exists (pure CSS), so no deck guard.
 
 ### iOS
 
@@ -116,7 +163,16 @@ Desktop Chrome, local backend:
 YouTube fallback (empty manifest or `MTV_SOURCE` unset on a fresh standalone
 instance): steps 1 and 4 behave the same.
 
-iPhone Safari: the strip shows CH/SKIP/FULL/PIP/CAST but no VOL pads.
+iPhone Safari: the strip shows CH/SKIP/FULL/CRT/PIP/CAST but no VOL pads.
+
+Volume bar and CRT toggle, desktop Chrome:
+6. VOL − shows the bar with 7 of 10 segments lit, label `VOLUME`, gone
+   after 2 s; the song credits are back afterwards.
+7. Press `CRT ON`: scanlines, vignette and hum disappear, the picture is no
+   longer zoomed, the pad reads `CRT OFF`, a static burst plays. Reload: still
+   plain, `localStorage["mtv-crt"]` is `"0"`. Press again: CRT look returns.
+8. Force the YouTube fallback in plain mode: the iframe is still zoomed (no
+   YouTube logo visible).
 
 ## Docs
 
