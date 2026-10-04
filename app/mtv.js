@@ -273,7 +273,19 @@
       fetch("/videos/manifest.json", { cache: "no-store" })
         .then(function (r) { return r.ok ? r.json() : null; })
         .catch(function () { return null; })
-        .then(function (m) { if (m && (m.videos || m).length) adopt(m); done(); });
+        .then(function (m) {
+          if (m && (m.videos || m).length) {
+            adopt(m);
+            // the channel we're on can empty between refreshes (its mediaDb
+            // playlist was deleted): fall to the nearest channel with
+            // content, as startup does, rather than dead air at the next tune
+            if (!lib.length) {
+              var j = scanCh(1, function (i) { return libFor(i).length > 0; });
+              if (j !== chIdx) { chIdx = j; saveCh(); currentId = null; buildLib(); }
+            }
+          }
+          done();
+        });
     }
 
     // double-buffer: `active` is on screen, `standby` silently preloads the

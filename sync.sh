@@ -20,6 +20,8 @@
 #   4. delete local videos no longer in ANY playlist (and unarchive them so a
 #      re-added video gets re-downloaded) — skipped if any fetch failed
 #   5. publish the manifest again
+# A background watcher also republishes the manifest within a minute of a
+# mediaDb playlist changing (see watch_playlists).
 #
 # One-shot mode: `sync.sh transcode-library` walks every mp4 under $DIR and
 # transcodes any that are still H.264 (probed first, so the operation is
@@ -41,6 +43,8 @@ DIR=/videos
 CHANNELS=/config/channels.json
 TRIGGER=/config/.sync-now
 INTERVAL="${SYNC_INTERVAL:-6h}"
+# how often the mediaDb playlist list is checked for changes (seconds)
+PLAYLIST_POLL="${PLAYLIST_POLL:-60}"
 SOURCE="${MTV_SOURCE:-youtube}"
 PLAYLISTS=/config/playlists.txt
 # ≤1080p H.264+AAC so the mp4 plays everywhere, Safari included
@@ -216,11 +220,15 @@ manifest() {
   set -- /tmp/pl.*.tsv
   [ -e "$1" ] || return 0
   MEDIADB_URL="$MEDIADB_URL" CHANNELS="$CHANNELS" python3 - "$DIR" "$@" <<'EOF'
-import json, os, subprocess, sys
+import fcntl, json, os, subprocess, sys
 from urllib.parse import quote, urlencode
 from urllib.request import urlopen
 
 d = sys.argv[1]
+# the pass and the playlist watcher (below) both publish; one writer at a time
+# so manifest.json and the durations cache never interleave. Held until exit.
+lock = open(os.path.join(d, ".manifest.lock"), "w")
+fcntl.flock(lock, fcntl.LOCK_EX)
 cachep = os.path.join(d, ".durations.json")
 try:
     cache = json.load(open(cachep))
@@ -379,6 +387,33 @@ print(f"[sync] manifest: {len(videos)} local videos across {len(channels)} chann
 EOF
 }
 
+# Playlist channels come from mediaDb at manifest time, which used to mean
+# waiting for a pass (6h, or hours while a transcode runs). Watch the
+# playlist list on a short timer instead and republish the manifest when it
+# changes: new, edited and deleted playlists are on air within a minute.
+# Downloads and pruning still belong to the pass. The manifest is cheap to
+# redo (durations cached, sidecars skipped when unchanged).
+playlists_fingerprint() {
+  python3 - "$MEDIADB_URL" <<'EOF'
+import hashlib, sys
+from urllib.request import urlopen
+with urlopen(sys.argv[1].rstrip("/") + "/api/playlists", timeout=5) as response:
+    print(hashlib.sha256(response.read()).hexdigest())
+EOF
+}
+
+watch_playlists() {
+  echo "[sync] watching mediadb playlists every ${PLAYLIST_POLL}s"
+  last=""
+  while :; do
+    sleep "$PLAYLIST_POLL"
+    now=$(playlists_fingerprint 2>/dev/null) || continue
+    [ "$now" = "$last" ] && continue
+    [ -n "$last" ] && echo "[sync] mediadb playlists changed, refreshing the manifest"
+    manifest && last="$now"
+  done
+}
+
 # sleep SYNC_INTERVAL, or until the admin page touches the trigger
 nap() {
   echo "[sync] sleeping $INTERVAL (or until $TRIGGER appears)"
@@ -405,6 +440,8 @@ if [ "$SOURCE" = files ]; then
     nap
   done
 fi
+
+[ -n "$MEDIADB_URL" ] && watch_playlists &
 
 while :; do
   ok=1
