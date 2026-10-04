@@ -79,6 +79,11 @@ The sync log reports how many music videos received metadata from mediaDb. A
 `mediadb unavailable` message is non-fatal; MTV still publishes playlist titles.
 Set `MTV_MEDIADB_URL=` to disable lookup or point it at another internal URL.
 
+mediaDb playlists become channels within a minute of a change: `mtv-sync`
+polls `/api/playlists` every `MTV_PLAYLIST_POLL` seconds (60) and republishes
+the manifest when the list changes (`mediadb playlists changed` in the log).
+Reload the TV page to see a new or removed channel.
+
 ## Re-encode the existing library to HEVC
 
 Run once after deploying a sync.sh change that adds the HEVC transcode step

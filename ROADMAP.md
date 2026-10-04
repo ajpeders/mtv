@@ -22,6 +22,10 @@ are all live and stable.
 - Playlist channels (2026-09-29): every mediaDb playlist airs as its own
   channel, numbered after the admin lineup and kept at the same number between
   syncs. Channels 2+ now exist without YouTube playlist ids.
+- Live playlist sync (2026-10-03): `mtv-sync` watches mediaDb's playlist
+  list every minute and republishes the manifest on change, so a playlist
+  created, edited or deleted in mediaDb is a channel within a minute instead
+  of at the next pass. The player hops off a channel that empties under it.
 
 - Volume control + CRT toggle (2026-10-03): `VOL −`/`VOL +` pads and `-`/`+`
   keys in 10% steps, remembered per device, shown as an old-school
@@ -47,7 +51,9 @@ cross-service work.
   (seen 2026-09-21: had to run the manifest step by hand to publish new
   mediaDb metadata). Check the trigger between transcodes and, when set,
   republish the manifest (cheap) before carrying on, or run manifest refresh
-  on its own short timer independent of downloads.
+  on its own short timer independent of downloads. Playlist changes no longer
+  need the trigger (2026-10-03 watcher); `channels.json` edits and new
+  mediaDb metadata still wait for the pass.
 
 - **(1) Verify standalone files mode in a real browser.** The 2026-09-30
   check was curl-only (player, manifest, `/admin/api/now`, video URLs incl.

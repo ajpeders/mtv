@@ -12,7 +12,8 @@ During each sync, MTV reads enriched music-video metadata from mediaDb and puts
 artist, song, album, and year into the local manifest. Playback remains
 independent: if mediaDb is unavailable, playlist titles are used instead.
 Each mediaDb playlist also airs as its own channel, numbered after the admin
-lineup.
+lineup. Playlist changes in mediaDb reach the channel list within a minute;
+the TV shows a new or removed channel after a page reload.
 
 ## Run it yourself
 

@@ -91,6 +91,13 @@ Runs forever in `mtv-sync`, one pass per `SYNC_INTERVAL` (default 6h) or when
    transient YouTube error cannot wipe the library.
 6. Publish the manifest again.
 
+A background watcher in the same container also republishes the manifest,
+independent of the pass: every `PLAYLIST_POLL` seconds (60) it hashes
+mediaDb's `/api/playlists` response and reruns the manifest step when the
+hash changes. The manifest step holds an `fcntl` lock on
+`/videos/.manifest.lock`, so the pass and the watcher never write
+`manifest.json` or the durations cache at the same time.
+
 Before each manifest publish, `mtv-sync` reads enriched `music-video` items
 from mediaDb over the internal Docker network. Matching is by YouTube video id;
 artist, canonical track title, album, year, featured artists, genres (the
@@ -128,6 +135,13 @@ number from the previous manifest, so the channel a viewer remembers doesn't
 drift as other playlists come and go. A deleted playlist's number isn't
 reused. It moves only when `channels.json` takes it. If mediaDb is
 unreachable, the previous pass's playlist channels are kept.
+
+A playlist created, edited or deleted in mediaDb is in the manifest within a
+minute (the watcher above). The player reads the lineup at page load, so a
+new or removed channel shows on the TV after a reload; channel contents
+refresh between videos. If the channel a viewer is on empties between
+refreshes, the player falls to the nearest channel with content at the next
+tune instead of going to dead air.
 
 Durations come from `ffprobe`, cached in `.durations.json`; they are the only
 input the schedule needs.
