@@ -282,6 +282,102 @@ class Parity(unittest.TestCase):
         self.assertNotEqual(schedule._artist(result[0]),
                             schedule._artist(result[-1]))
 
+    def test_separation_aabbcc_feasible(self):
+        """AABBCC (2 of each) is feasible — greedy interleaving must separate.
+
+        Regression for t_c173b54b: static one-time artist sorting exhausted
+        early artists and returned the original list unchanged.
+        """
+        lib = [
+            {"id": "a1", "title": "A - Song 1", "duration": 60},
+            {"id": "a2", "title": "A - Song 2", "duration": 60},
+            {"id": "b1", "title": "B - Song 1", "duration": 60},
+            {"id": "b2", "title": "B - Song 2", "duration": 60},
+            {"id": "c1", "title": "C - Song 1", "duration": 60},
+            {"id": "c2", "title": "C - Song 2", "duration": 60},
+        ]
+        result = schedule._separate_consecutive(lib)
+        self.assertEqual(len(result), 6)
+        for i in range(len(result) - 1):
+            self.assertNotEqual(schedule._artist(result[i]),
+                                schedule._artist(result[i + 1]),
+                                f"consecutive at {i},{i+1}")
+        self.assertNotEqual(schedule._artist(result[0]),
+                            schedule._artist(result[-1]))
+
+    def test_schedule_for_aabbcc(self):
+        """Full schedule_for path on six IDs AABBCC — must separate."""
+        manifest = {
+            "videos": [
+                {"id": "a1", "title": "A - Song 1", "duration": 60, "artist": "A"},
+                {"id": "a2", "title": "A - Song 2", "duration": 60, "artist": "A"},
+                {"id": "b1", "title": "B - Song 1", "duration": 60, "artist": "B"},
+                {"id": "b2", "title": "B - Song 2", "duration": 60, "artist": "B"},
+                {"id": "c1", "title": "C - Song 1", "duration": 60, "artist": "C"},
+                {"id": "c2", "title": "C - Song 2", "duration": 60, "artist": "C"},
+            ],
+            "channels": {"1": ["a1", "a2", "b1", "b2", "c1", "c2"]},
+        }
+        lib = schedule.schedule_for(manifest, 1)
+        self.assertEqual(len(lib), 6)
+        for i in range(len(lib) - 1):
+            self.assertNotEqual(schedule._artist(lib[i]),
+                                schedule._artist(lib[i + 1]),
+                                f"consecutive at {i},{i+1}")
+
+    def test_feasible_distribution_property(self):
+        """For all small n ≤ 8 with feasible artist distributions,
+        _separate_consecutive must produce linearly clean output."""
+        import itertools
+
+        artists = ["A", "B", "C", "D"]
+        for n in range(3, 9):
+            # Generate all multisets of size n from artists
+            for combo in itertools.combinations_with_replacement(artists, n):
+                counts = [combo.count(a) for a in artists]
+                max_count = max(counts)
+                if max_count <= (n + 1) // 2:
+                    # Build lib
+                    lib = []
+                    for idx, art in enumerate(combo):
+                        lib.append({"id": f"{art}{idx}", "title": f"{art} - S", "duration": 60})
+                    result = schedule._separate_consecutive(lib)
+                    for i in range(len(result) - 1):
+                        self.assertNotEqual(
+                            schedule._artist(result[i]),
+                            schedule._artist(result[i + 1]),
+                            f"n={n} combo={combo} consecutive at {i},{i+1}",
+                        )
+
+    def test_cyclic_seam_exhaustive(self):
+        """Cyclic seam fix: for small cases where cyclic separation is also
+        feasible (max_count <= floor(n/2)), the seam must always be clean."""
+        import itertools
+
+        artists = ["A", "B", "C"]
+        for n in range(3, 8):
+            for combo in itertools.combinations_with_replacement(artists, n):
+                counts = [combo.count(a) for a in artists]
+                max_count = max(counts)
+                if max_count <= n // 2:  # cyclically feasible (stricter than linear)
+                    lib = []
+                    for idx, art in enumerate(combo):
+                        lib.append({"id": f"{art}{idx}", "title": f"{art} - S", "duration": 60})
+                    result = schedule._separate_consecutive(lib)
+                    # Linear adjacencies must be clean
+                    for i in range(len(result) - 1):
+                        self.assertNotEqual(
+                            schedule._artist(result[i]),
+                            schedule._artist(result[i + 1]),
+                            f"linear consecutive n={n} combo={combo}",
+                        )
+                    # Cyclic seam must also be clean (seam fix applied)
+                    self.assertNotEqual(
+                        schedule._artist(result[0]),
+                        schedule._artist(result[-1]),
+                        f"cyclic seam n={n} combo={combo}",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -77,6 +77,8 @@ def _separate_consecutive(lib):
     prev_artist = None
 
     while len(result) < n:
+        # Re-sort by remaining count descending, ties by name ascending
+        artists = sorted(groups.keys(), key=lambda a: (-len(groups[a]), a))
         chosen = None
         for artist in artists:
             if artist != prev_artist and groups[artist]:

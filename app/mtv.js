@@ -265,16 +265,16 @@
         if (groups[art].length > maxCount) maxCount = groups[art].length;
       }
       if (maxCount > Math.ceil(n / 2)) return items;
-      // Sort artists by count descending, ties by name
-      var artists = Object.keys(groups).sort(function (a, b) {
-        if (groups[b].length !== groups[a].length) return groups[b].length - groups[a].length;
-        return a < b ? -1 : 1;
-      });
       // Greedy interleaving: always pick the artist with most remaining items
       // that isn't the previous artist
       var result = [];
       var prev = null;
       while (result.length < n) {
+        // Re-sort by remaining count descending, ties by name
+        var artists = Object.keys(groups).sort(function (a, b) {
+          if (groups[b].length !== groups[a].length) return groups[b].length - groups[a].length;
+          return a < b ? -1 : 1;
+        });
         var chosen = null;
         for (var ai = 0; ai < artists.length; ai++) {
           if (artists[ai] !== prev && groups[artists[ai]].length > 0) {
