@@ -35,6 +35,35 @@ HARNESS = r"""
 %(mulberry32)s
 %(creditText)s
 var EPOCH = 365472000, SEED = 1981;
+function itemArtist(it) {
+  var artist = (it && it.artist) || "";
+  if (artist) return artist;
+  var title = it && it.title || "";
+  var split = title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  return split ? split[1] : "";
+}
+function separateConsecutive(items) {
+  var n = items.length;
+  if (n < 3) return items;
+  for (var i = 0; i < n - 1; i++) {
+    if (itemArtist(items[i]) !== itemArtist(items[i + 1])) continue;
+    var best = null;
+    for (var k = i + 2; k < n; k++) {
+      if (itemArtist(items[k]) !== itemArtist(items[i])) { best = k; break; }
+    }
+    if (best !== null) {
+      var tmp = items[i + 1]; items[i + 1] = items[best]; items[best] = tmp;
+      continue;
+    }
+    for (var k = i - 1; k >= 0; k--) {
+      if (itemArtist(items[k]) !== itemArtist(items[i])) {
+        var tmp2 = items[i]; items[i] = items[k]; items[k] = tmp2;
+        break;
+      }
+    }
+  }
+  return items;
+}
 function scheduleFor(manifest, num) {
   var vids = manifest.videos || manifest;
   var chans = manifest.channels || null;
@@ -48,7 +77,7 @@ function scheduleFor(manifest, num) {
     var j = Math.floor(rnd() * (i + 1));
     var t = items[i]; items[i] = items[j]; items[j] = t;
   }
-  return items;
+  return separateConsecutive(items);
 }
 function onAir(lib, nowSec) {
   var total = lib.reduce(function (s, it) { return s + it.duration; }, 0);
@@ -127,6 +156,72 @@ class Parity(unittest.TestCase):
         self.assertNotIn("ggg777", ids)
         self.assertEqual(len(schedule.schedule_for(self.manifest, 4)), 8)
         self.assertIsNone(schedule.on_air([], 0))
+
+    def test_no_consecutive_same_artist(self):
+        """After separation, no two neighbours should share an artist."""
+        for num in CHANNELS:
+            lib = schedule.schedule_for(self.manifest, num)
+            if len(lib) < 2:
+                continue
+            for i in range(len(lib) - 1):
+                a = schedule._artist(lib[i])
+                b = schedule._artist(lib[i + 1])
+                self.assertNotEqual(a, b,
+                                    f"ch {num}: consecutive '{a}' at pos {i},{i+1}")
+
+    def test_separation_small_lib(self):
+        """Libraries with < 3 items should pass through unchanged."""
+        small = {"videos": [
+            {"id": "a", "title": "A - Song A", "duration": 60},
+            {"id": "b", "title": "B - Song B", "duration": 60},
+        ], "channels": {"1": ["a", "b"]}}
+        lib = schedule.schedule_for(small, 1)
+        self.assertEqual(len(lib), 2)
+
+    def test_separation_all_same_artist(self):
+        """If every item shares an artist, the list is unchanged."""
+        same = {"videos": [
+            {"id": "x1", "title": "Drake - Song 1", "duration": 60, "artist": "Drake"},
+            {"id": "x2", "title": "Drake - Song 2", "duration": 60, "artist": "Drake"},
+            {"id": "x3", "title": "Drake - Song 3", "duration": 60, "artist": "Drake"},
+        ], "channels": {"1": ["x1", "x2", "x3"]}}
+        lib = schedule.schedule_for(same, 1)
+        self.assertEqual(len(lib), 3)  # still 3, nothing removed
+
+    def test_determinism_across_runs(self):
+        """schedule_for must be stable: same input → same output."""
+        lib1 = schedule.schedule_for(self.manifest, 2)
+        lib2 = schedule.schedule_for(self.manifest, 2)
+        self.assertEqual([it["id"] for it in lib1],
+                         [it["id"] for it in lib2])
+
+    def test_library_addition_preserves_order(self):
+        """Adding a video should not change the relative order of existing items."""
+        ch1_ids = self.manifest["channels"]["1"]
+        base_lib = schedule.schedule_for(self.manifest, 1)
+        base_ids = [it["id"] for it in base_lib]
+        # Add a new video to channel 1
+        extra = {"id": "zzz999", "title": "New Artist - New Song", "duration": 120,
+                 "artist": "New Artist"}
+        new_videos = self.manifest["videos"] + [extra]
+        new_channels = dict(self.manifest["channels"])
+        new_channels["1"] = ch1_ids + ["zzz999"]
+        new_manifest = {"videos": new_videos, "channels": new_channels}
+        new_lib = schedule.schedule_for(new_manifest, 1)
+        new_ids = [it["id"] for it in new_lib]
+        # Check base items appear in same relative order
+        base_remaining = list(base_ids)
+        for nid in new_ids:
+            if nid in base_remaining:
+                base_remaining.remove(nid)
+        self.assertEqual(base_remaining, [])  # all base items present
+        # Relative order preserved
+        for i, a in enumerate(base_ids):
+            for j, b in enumerate(base_ids):
+                if i < j:
+                    ai = new_ids.index(a)
+                    bj = new_ids.index(b)
+                    self.assertLess(ai, bj, f"order changed: {a} before {b}")
 
 
 if __name__ == "__main__":

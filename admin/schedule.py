@@ -29,8 +29,53 @@ def mulberry32(seed):
     return rnd
 
 
+def _artist(it):
+    """Return the artist string for an item, falling back to title parsing."""
+    obj = it if isinstance(it, dict) else {}
+    artist = obj.get("artist") or ""
+    if artist:
+        return artist
+    match = _SPLIT.match(obj.get("title") or "")
+    return match.group(1) if match else ""
+
+
+def _separate_consecutive(lib, rnd):
+    """Deterministic pass: swap consecutive same-artist pairs apart.
+
+    Walk the list; when two neighbours share an artist, find the nearest
+    non-matching item on the other side of a different-artist gap and swap
+    it in.  Uses *rnd* for tie-breaking so the result stays fully
+    deterministic and parity-safe.
+    """
+    n = len(lib)
+    if n < 3:
+        return lib  # nothing to separate with < 3 items
+    for i in range(n - 1):
+        a_artist = _artist(lib[i])
+        b_artist = _artist(lib[i + 1])
+        if a_artist != b_artist:
+            continue
+        # lib[i] and lib[i+1] share an artist — try to pull a different
+        # artist into position i+1 from somewhere later in the list
+        best = None
+        for k in range(i + 2, n):
+            if _artist(lib[k]) != a_artist:
+                best = k
+                break
+        if best is not None:
+            lib[i + 1], lib[best] = lib[best], lib[i + 1]
+            continue
+        # no different-artist item ahead — try backwards from i
+        for k in range(i - 1, -1, -1):
+            if _artist(lib[k]) != a_artist:
+                lib[i], lib[k] = lib[k], lib[i]
+                break
+    return lib
+
+
 def schedule_for(manifest, num):
-    """Deterministic play order for channel `num`: sort by id, seeded shuffle."""
+    """Deterministic play order for channel `num`: sort by id, seeded shuffle,
+    then separate consecutive same-artist pairs."""
     vids = manifest.get("videos") if isinstance(manifest, dict) else manifest
     vids = vids or []
     chans = manifest.get("channels") if isinstance(manifest, dict) else None
@@ -43,7 +88,7 @@ def schedule_for(manifest, num):
     for i in range(len(items) - 1, 0, -1):
         j = int(rnd() * (i + 1))
         items[i], items[j] = items[j], items[i]
-    return items
+    return _separate_consecutive(items, rnd)
 
 
 def on_air(lib, now_sec):

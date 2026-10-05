@@ -232,6 +232,39 @@
         return it.duration > 0 && (!ids || ids.indexOf(it.id) !== -1);
       });
     }
+    // Extract artist from an item (manifest object or title-only)
+    function itemArtist(it) {
+      var artist = (it && it.artist) || "";
+      if (artist) return artist;
+      var title = it && it.title || "";
+      var split = title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+      return split ? split[1] : "";
+    }
+    // Deterministic pass: swap consecutive same-artist pairs apart
+    function separateConsecutive(items) {
+      var n = items.length;
+      if (n < 3) return items;
+      for (var i = 0; i < n - 1; i++) {
+        if (itemArtist(items[i]) !== itemArtist(items[i + 1])) continue;
+        // find nearest different-artist item ahead
+        var best = null;
+        for (var k = i + 2; k < n; k++) {
+          if (itemArtist(items[k]) !== itemArtist(items[i])) { best = k; break; }
+        }
+        if (best !== null) {
+          var tmp = items[i + 1]; items[i + 1] = items[best]; items[best] = tmp;
+          continue;
+        }
+        // try backwards from i
+        for (var k = i - 1; k >= 0; k--) {
+          if (itemArtist(items[k]) !== itemArtist(items[i])) {
+            var tmp2 = items[i]; items[i] = items[k]; items[k] = tmp2;
+            break;
+          }
+        }
+      }
+      return items;
+    }
     function buildLib() {
       var items = libFor(chIdx);
       items.sort(function (a, b) { return a.id < b.id ? -1 : 1; });
@@ -242,7 +275,7 @@
         var j = Math.floor(rnd() * (i + 1));
         var t = items[i]; items[i] = items[j]; items[j] = t;
       }
-      lib = items;
+      lib = separateConsecutive(items);
     }
     adopt(manifest0);
     // a remembered channel can be empty (playlist not filled in yet, or its
