@@ -39,38 +39,88 @@ def _artist(it):
     return match.group(1) if match else ""
 
 
-def _separate_consecutive(lib, rnd):
-    """Deterministic pass: swap consecutive same-artist pairs apart.
+def _separate_consecutive(lib):
+    """Deterministic pass: rearrange to avoid consecutive same-artist pairs.
 
-    Walk the list; when two neighbours share an artist, find the nearest
-    non-matching item on the other side of a different-artist gap and swap
-    it in.  Uses *rnd* for tie-breaking so the result stays fully
-    deterministic and parity-safe.
+    Uses a greedy interleaving approach: always pick the artist with the most
+    remaining items that isn't the previous artist, scanning in a fixed
+    (count-desc, name-asc) order. Guarantees no consecutive same-artist pairs
+    in the linear order when feasible (no artist has more than ceil(n/2) items).
+
+    After building the linear order, checks the cyclic seam (last→first).
+    If the seam repeats an artist, attempts a swap fix: tries swapping the
+    last item with each interior item to find a valid cyclic arrangement.
+    If no swap works, returns the linearly optimal result — the distribution
+    may be cyclically impossible (e.g. AABBB with 5 items, B=3 > floor(5/2)=2).
+    See regression tests for feasible/impossible examples.
     """
+    from collections import defaultdict
+
     n = len(lib)
     if n < 3:
         return lib  # nothing to separate with < 3 items
-    for i in range(n - 1):
-        a_artist = _artist(lib[i])
-        b_artist = _artist(lib[i + 1])
-        if a_artist != b_artist:
-            continue
-        # lib[i] and lib[i+1] share an artist — try to pull a different
-        # artist into position i+1 from somewhere later in the list
-        best = None
-        for k in range(i + 2, n):
-            if _artist(lib[k]) != a_artist:
-                best = k
+
+    # Group items by artist (preserving insertion order within each group)
+    groups = defaultdict(list)
+    for item in lib:
+        groups[_artist(item)].append(item)
+
+    # Check linear feasibility: no artist can exceed ceil(n/2)
+    max_count = max(len(g) for g in groups.values())
+    if max_count > (n + 1) // 2:
+        return lib  # impossible even linearly — return unchanged
+
+    # Sort artists by count descending, ties by name ascending (deterministic)
+    artists = sorted(groups.keys(), key=lambda a: (-len(groups[a]), a))
+
+    result = []
+    prev_artist = None
+
+    while len(result) < n:
+        chosen = None
+        for artist in artists:
+            if artist != prev_artist and groups[artist]:
+                chosen = artist
                 break
-        if best is not None:
-            lib[i + 1], lib[best] = lib[best], lib[i + 1]
+        if chosen is None:
+            return lib  # shouldn't happen after feasibility check
+
+        result.append(groups[chosen].pop(0))
+        prev_artist = chosen
+
+    # Check cyclic seam and try swap fix
+    if _artist(result[0]) == _artist(result[-1]):
+        fixed = _fix_cyclic_seam(result)
+        if fixed is not None:
+            return fixed
+
+    return result
+
+
+def _fix_cyclic_seam(result):
+    """Try to fix a bad seam by swapping the last item with an interior item.
+
+    Returns a new list with a clean cyclic seam, or None if no swap works.
+    """
+    n = len(result)
+    last_artist = _artist(result[-1])
+
+    for i in range(1, n - 1):
+        if _artist(result[i]) == last_artist:
             continue
-        # no different-artist item ahead — try backwards from i
-        for k in range(i - 1, -1, -1):
-            if _artist(lib[k]) != a_artist:
-                lib[i], lib[k] = lib[k], lib[i]
+        # Swap result[i] and result[-1]
+        new_result = list(result)
+        new_result[i], new_result[-1] = new_result[-1], new_result[i]
+        # Check all adjacencies
+        clean = True
+        for j in range(n - 1):
+            if _artist(new_result[j]) == _artist(new_result[j + 1]):
+                clean = False
                 break
-    return lib
+        if clean and _artist(new_result[0]) != _artist(new_result[-1]):
+            return new_result
+
+    return None
 
 
 def schedule_for(manifest, num):
@@ -88,7 +138,7 @@ def schedule_for(manifest, num):
     for i in range(len(items) - 1, 0, -1):
         j = int(rnd() * (i + 1))
         items[i], items[j] = items[j], items[i]
-    return _separate_consecutive(items, rnd)
+    return _separate_consecutive(items)
 
 
 def on_air(lib, now_sec):

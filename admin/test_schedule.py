@@ -34,36 +34,10 @@ def js_function(name):
 HARNESS = r"""
 %(mulberry32)s
 %(creditText)s
+%(itemArtist)s
+%(separateConsecutive)s
+%(fixCyclicSeam)s
 var EPOCH = 365472000, SEED = 1981;
-function itemArtist(it) {
-  var artist = (it && it.artist) || "";
-  if (artist) return artist;
-  var title = it && it.title || "";
-  var split = title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
-  return split ? split[1] : "";
-}
-function separateConsecutive(items) {
-  var n = items.length;
-  if (n < 3) return items;
-  for (var i = 0; i < n - 1; i++) {
-    if (itemArtist(items[i]) !== itemArtist(items[i + 1])) continue;
-    var best = null;
-    for (var k = i + 2; k < n; k++) {
-      if (itemArtist(items[k]) !== itemArtist(items[i])) { best = k; break; }
-    }
-    if (best !== null) {
-      var tmp = items[i + 1]; items[i + 1] = items[best]; items[best] = tmp;
-      continue;
-    }
-    for (var k = i - 1; k >= 0; k--) {
-      if (itemArtist(items[k]) !== itemArtist(items[i])) {
-        var tmp2 = items[i]; items[i] = items[k]; items[k] = tmp2;
-        break;
-      }
-    }
-  }
-  return items;
-}
 function scheduleFor(manifest, num) {
   var vids = manifest.videos || manifest;
   var chans = manifest.channels || null;
@@ -108,6 +82,9 @@ class Parity(unittest.TestCase):
         harness = HARNESS % {
             "mulberry32": js_function("mulberry32"),
             "creditText": js_function("creditText"),
+            "itemArtist": js_function("itemArtist"),
+            "separateConsecutive": js_function("separateConsecutive"),
+            "fixCyclicSeam": js_function("fixCyclicSeam"),
         }
         payload = json.dumps({
             "manifest": cls.manifest,
@@ -212,6 +189,98 @@ class Parity(unittest.TestCase):
         # All base items plus the new one must be present
         self.assertIn("zzz999", new_ids)
         self.assertEqual(base_ids, new_ids - {"zzz999"})
+
+    def test_separation_aabbb_feasible(self):
+        """AABBB (2 A, 3 B) is linearly feasible — no consecutive same-artist
+        in linear order. Cyclic seam is impossible (3 > floor(5/2)=2) so the
+        algorithm returns the best linear arrangement."""
+        lib = [
+            {"id": "a1", "title": "A - Song 1", "duration": 60},
+            {"id": "a2", "title": "A - Song 2", "duration": 60},
+            {"id": "b1", "title": "B - Song 1", "duration": 60},
+            {"id": "b2", "title": "B - Song 2", "duration": 60},
+            {"id": "b3", "title": "B - Song 3", "duration": 60},
+        ]
+        result = schedule._separate_consecutive(lib)
+        self.assertEqual(len(result), 5)
+        for i in range(len(result) - 1):
+            self.assertNotEqual(schedule._artist(result[i]),
+                                schedule._artist(result[i + 1]),
+                                f"consecutive at {i},{i+1}")
+
+    def test_separation_aaaab_impossible(self):
+        """AAAAB (4 A, 1 B) is impossible — list returned unchanged."""
+        lib = [
+            {"id": "a1", "title": "A - Song 1", "duration": 60},
+            {"id": "a2", "title": "A - Song 2", "duration": 60},
+            {"id": "a3", "title": "A - Song 3", "duration": 60},
+            {"id": "a4", "title": "A - Song 4", "duration": 60},
+            {"id": "b1", "title": "B - Song 1", "duration": 60},
+        ]
+        result = schedule._separate_consecutive(lib)
+        self.assertEqual(len(result), 5)
+        # Should be unchanged (majority > ceil(5/2)=3)
+        self.assertEqual([schedule._artist(r) for r in result],
+                         ["A", "A", "A", "A", "B"])
+
+    def test_separation_cyclic_wraparound(self):
+        """Linear order is clean but last==first artist — seam must be fixed."""
+        # AABC: linear order ABCA has clean adjacencies but seam A→A
+        lib = [
+            {"id": "a1", "title": "A - Song 1", "duration": 60},
+            {"id": "a2", "title": "A - Song 2", "duration": 60},
+            {"id": "b1", "title": "B - Song 1", "duration": 60},
+            {"id": "c1", "title": "C - Song 1", "duration": 60},
+        ]
+        result = schedule._separate_consecutive(lib)
+        self.assertEqual(len(result), 4)
+        for i in range(len(result) - 1):
+            self.assertNotEqual(schedule._artist(result[i]),
+                                schedule._artist(result[i + 1]))
+        self.assertNotEqual(schedule._artist(result[0]),
+                            schedule._artist(result[-1]))
+
+    def test_separation_two_items(self):
+        """Two different items pass through unchanged."""
+        lib = [
+            {"id": "a1", "title": "A - Song 1", "duration": 60},
+            {"id": "b1", "title": "B - Song 1", "duration": 60},
+        ]
+        result = schedule._separate_consecutive(lib)
+        self.assertEqual(len(result), 2)
+
+    def test_separation_three_items_all_different(self):
+        """Three different artists pass through unchanged."""
+        lib = [
+            {"id": "a1", "title": "A - Song 1", "duration": 60},
+            {"id": "b1", "title": "B - Song 1", "duration": 60},
+            {"id": "c1", "title": "C - Song 1", "duration": 60},
+        ]
+        result = schedule._separate_consecutive(lib)
+        self.assertEqual(len(result), 3)
+        for i in range(len(result) - 1):
+            self.assertNotEqual(schedule._artist(result[i]),
+                                schedule._artist(result[i + 1]))
+        self.assertNotEqual(schedule._artist(result[0]),
+                            schedule._artist(result[-1]))
+
+    def test_separation_even_split(self):
+        """Even split (AAABBB) must produce no consecutive pairs."""
+        lib = [
+            {"id": "a1", "title": "A - Song 1", "duration": 60},
+            {"id": "a2", "title": "A - Song 2", "duration": 60},
+            {"id": "a3", "title": "A - Song 3", "duration": 60},
+            {"id": "b1", "title": "B - Song 1", "duration": 60},
+            {"id": "b2", "title": "B - Song 2", "duration": 60},
+            {"id": "b3", "title": "B - Song 3", "duration": 60},
+        ]
+        result = schedule._separate_consecutive(lib)
+        self.assertEqual(len(result), 6)
+        for i in range(len(result) - 1):
+            self.assertNotEqual(schedule._artist(result[i]),
+                                schedule._artist(result[i + 1]))
+        self.assertNotEqual(schedule._artist(result[0]),
+                            schedule._artist(result[-1]))
 
 
 if __name__ == "__main__":
