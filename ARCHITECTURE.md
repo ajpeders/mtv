@@ -27,9 +27,13 @@ air from the wall clock:
 1. Take the channel's videos from `manifest.json`.
 2. Sort by id, then shuffle with `mulberry32` seeded `1981 + channel number` —
    deterministic, so every device produces the identical running order.
-3. A deterministic post-pass walks the shuffled list and swaps any consecutive
-   same-artist pair with the nearest different-artist neighbour, so the broadcast
-   never plays two songs from the same artist back-to-back.
+3. A deterministic post-pass interleaves artists by count (most-popular-first,
+   ties broken by name) so no two neighbours share an artist. This guarantees a
+   clean linear order when no artist dominates more than ceil(n/2) items. If the
+   cyclic seam (last→first) repeats an artist, a swap fix is attempted; if that
+   fails the distribution is cyclically impossible (e.g. 3 B's in 5 slots) and
+   the linearly optimal order is kept. See `admin/test_schedule.py` for edge-case
+   tests (AABBB, AAAAB, cyclic wraparound, even splits).
 4. `offset = (now - EPOCH) mod total_duration`, where `EPOCH` is 1981-08-01,
    MTV's sign-on. Walk the list to find the video and the seek position.
 

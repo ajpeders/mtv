@@ -240,30 +240,74 @@
       var split = title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
       return split ? split[1] : "";
     }
-    // Deterministic pass: swap consecutive same-artist pairs apart
+    // Deterministic pass: rearrange to avoid consecutive same-artist pairs.
+    // Uses a greedy max-count interleaving approach. Guarantees no consecutive
+    // same-artist pairs in the linear order when feasible (no artist has more
+    // than ceil(n/2) items). After building the linear order, checks the cyclic
+    // seam (last→first). If the seam repeats an artist, attempts a swap fix:
+    // tries swapping the last item with each interior item to find a valid
+    // cyclic arrangement. If no swap works, returns the linearly optimal result
+    // — the distribution may be cyclically impossible (e.g. AABBB with 5 items,
+    // B=3 > floor(5/2)=2). See regression tests for feasible/impossible examples.
     function separateConsecutive(items) {
       var n = items.length;
       if (n < 3) return items;
-      for (var i = 0; i < n - 1; i++) {
-        if (itemArtist(items[i]) !== itemArtist(items[i + 1])) continue;
-        // find nearest different-artist item ahead
-        var best = null;
-        for (var k = i + 2; k < n; k++) {
-          if (itemArtist(items[k]) !== itemArtist(items[i])) { best = k; break; }
-        }
-        if (best !== null) {
-          var tmp = items[i + 1]; items[i + 1] = items[best]; items[best] = tmp;
-          continue;
-        }
-        // try backwards from i
-        for (var k = i - 1; k >= 0; k--) {
-          if (itemArtist(items[k]) !== itemArtist(items[i])) {
-            var tmp2 = items[i]; items[i] = items[k]; items[k] = tmp2;
+      // Group items by artist
+      var groups = {};
+      for (var i = 0; i < n; i++) {
+        var art = itemArtist(items[i]);
+        if (!groups[art]) groups[art] = [];
+        groups[art].push(items[i]);
+      }
+      // Check linear feasibility
+      var maxCount = 0;
+      for (var art in groups) {
+        if (groups[art].length > maxCount) maxCount = groups[art].length;
+      }
+      if (maxCount > Math.ceil(n / 2)) return items;
+      // Sort artists by count descending, ties by name
+      var artists = Object.keys(groups).sort(function (a, b) {
+        if (groups[b].length !== groups[a].length) return groups[b].length - groups[a].length;
+        return a < b ? -1 : 1;
+      });
+      // Greedy interleaving: always pick the artist with most remaining items
+      // that isn't the previous artist
+      var result = [];
+      var prev = null;
+      while (result.length < n) {
+        var chosen = null;
+        for (var ai = 0; ai < artists.length; ai++) {
+          if (artists[ai] !== prev && groups[artists[ai]].length > 0) {
+            chosen = artists[ai];
             break;
           }
         }
+        if (chosen === null) return items; // shouldn't happen after feasibility check
+        result.push(groups[chosen].shift());
+        prev = chosen;
       }
-      return items;
+      // Check cyclic seam and try swap fix
+      if (itemArtist(result[0]) === itemArtist(result[n - 1])) {
+        var fixed = fixCyclicSeam(result);
+        if (fixed) return fixed;
+      }
+      return result;
+    }
+    function fixCyclicSeam(result) {
+      var n = result.length;
+      var lastArt = itemArtist(result[n - 1]);
+      for (var i = 1; i < n - 1; i++) {
+        if (itemArtist(result[i]) === lastArt) continue;
+        var tmp = result[i]; result[i] = result[n - 1]; result[n - 1] = tmp;
+        var clean = true;
+        for (var j = 0; j < n - 1; j++) {
+          if (itemArtist(result[j]) === itemArtist(result[j + 1])) { clean = false; break; }
+        }
+        if (clean && itemArtist(result[0]) !== itemArtist(result[n - 1])) return result;
+        // undo swap
+        tmp = result[i]; result[i] = result[n - 1]; result[n - 1] = tmp;
+      }
+      return null;
     }
     function buildLib() {
       var items = libFor(chIdx);
