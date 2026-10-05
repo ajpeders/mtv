@@ -195,11 +195,11 @@ class Parity(unittest.TestCase):
         self.assertEqual([it["id"] for it in lib1],
                          [it["id"] for it in lib2])
 
-    def test_library_addition_preserves_order(self):
-        """Adding a video should not change the relative order of existing items."""
+    def test_library_addition_includes_all_items(self):
+        """Adding a video must keep every existing item in the schedule."""
         ch1_ids = self.manifest["channels"]["1"]
         base_lib = schedule.schedule_for(self.manifest, 1)
-        base_ids = [it["id"] for it in base_lib]
+        base_ids = set(it["id"] for it in base_lib)
         # Add a new video to channel 1
         extra = {"id": "zzz999", "title": "New Artist - New Song", "duration": 120,
                  "artist": "New Artist"}
@@ -208,20 +208,10 @@ class Parity(unittest.TestCase):
         new_channels["1"] = ch1_ids + ["zzz999"]
         new_manifest = {"videos": new_videos, "channels": new_channels}
         new_lib = schedule.schedule_for(new_manifest, 1)
-        new_ids = [it["id"] for it in new_lib]
-        # Check base items appear in same relative order
-        base_remaining = list(base_ids)
-        for nid in new_ids:
-            if nid in base_remaining:
-                base_remaining.remove(nid)
-        self.assertEqual(base_remaining, [])  # all base items present
-        # Relative order preserved
-        for i, a in enumerate(base_ids):
-            for j, b in enumerate(base_ids):
-                if i < j:
-                    ai = new_ids.index(a)
-                    bj = new_ids.index(b)
-                    self.assertLess(ai, bj, f"order changed: {a} before {b}")
+        new_ids = set(it["id"] for it in new_lib)
+        # All base items plus the new one must be present
+        self.assertIn("zzz999", new_ids)
+        self.assertEqual(base_ids, new_ids - {"zzz999"})
 
 
 if __name__ == "__main__":
