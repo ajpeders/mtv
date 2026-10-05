@@ -27,7 +27,10 @@ air from the wall clock:
 1. Take the channel's videos from `manifest.json`.
 2. Sort by id, then shuffle with `mulberry32` seeded `1981 + channel number` —
    deterministic, so every device produces the identical running order.
-3. `offset = (now - EPOCH) mod total_duration`, where `EPOCH` is 1981-08-01,
+3. A deterministic post-pass walks the shuffled list and swaps any consecutive
+   same-artist pair with the nearest different-artist neighbour, so the broadcast
+   never plays two songs from the same artist back-to-back.
+4. `offset = (now - EPOCH) mod total_duration`, where `EPOCH` is 1981-08-01,
    MTV's sign-on. Walk the list to find the video and the seek position.
 
 Consequences worth knowing:
