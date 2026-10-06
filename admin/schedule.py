@@ -29,105 +29,47 @@ def mulberry32(seed):
     return rnd
 
 
-def _artist(it):
-    """Return the artist string for an item, falling back to title parsing."""
-    obj = it if isinstance(it, dict) else {}
-    artist = obj.get("artist") or ""
-    if artist:
-        return artist
-    match = _SPLIT.match(obj.get("title") or "")
-    return match.group(1) if match else ""
+def _artist_key(item):
+    """Who sang it, for spacing: credit()'s artist, case-folded. A video with
+    no known artist gets a key of its own, so it never counts as a repeat."""
+    return credit(item)["artist"].strip().lower() or "\0" + str(item.get("id"))
 
 
-def _separate_consecutive(lib):
-    """Deterministic pass: rearrange to avoid consecutive same-artist pairs.
-
-    Uses a greedy interleaving approach: always pick the artist with the most
-    remaining items that isn't the previous artist, scanning in a fixed
-    (count-desc, name-asc) order. Guarantees no consecutive same-artist pairs
-    in the linear order when feasible (no artist has more than ceil(n/2) items).
-
-    After building the linear order, checks the cyclic seam (last→first).
-    If the seam repeats an artist, attempts a swap fix: tries swapping the
-    last item with each interior item to find a valid cyclic arrangement.
-    If no swap works, returns the linearly optimal result — the distribution
-    may be cyclically impossible (e.g. AABBB with 5 items, B=3 > floor(5/2)=2).
-    See regression tests for feasible/impossible examples.
-    """
-    from collections import defaultdict
-
-    n = len(lib)
-    if n < 3:
-        return lib  # nothing to separate with < 3 items
-
-    # Group items by artist (preserving insertion order within each group)
-    groups = defaultdict(list)
-    for item in lib:
-        groups[_artist(item)].append(item)
-
-    # Check linear feasibility: no artist can exceed ceil(n/2)
-    max_count = max(len(g) for g in groups.values())
-    if max_count > (n + 1) // 2:
-        return lib  # impossible even linearly — return unchanged
-
-    # Sort artists by count descending, ties by name ascending (deterministic)
-    artists = sorted(groups.keys(), key=lambda a: (-len(groups[a]), a))
-
-    result = []
-    prev_artist = None
-
-    while len(result) < n:
-        # Re-sort by remaining count descending, ties by name ascending
-        artists = sorted(groups.keys(), key=lambda a: (-len(groups[a]), a))
-        chosen = None
-        for artist in artists:
-            if artist != prev_artist and groups[artist]:
-                chosen = artist
+def _separate_artists(items):
+    """Port of separateArtists: reorder so one artist never plays twice in a
+    row, nor across the loop seam (last -> first), keeping the shuffle's order
+    wherever it can."""
+    rest = [(_artist_key(it), it) for it in items]
+    left = {}
+    for key, _ in rest:
+        left[key] = left.get(key, 0) + 1
+    out, prev = [], None
+    while rest:
+        # an artist holding more than half of what's left has to go now, or
+        # it can't be spaced out later
+        must = next((k for k, c in left.items() if 2 * c > len(rest)), None)
+        if must == prev:
+            must = None
+        pick = next((i for i, (k, _) in enumerate(rest)
+                     if k != prev and must in (None, k)), 0)
+        key, item = rest.pop(pick)
+        left[key] -= 1
+        out.append((key, item))
+        prev = key
+    # the channel loops: move a last song that matches the first into a gap
+    # between two other artists
+    last = out[-1][0] if out else None
+    if len(out) > 2 and out[0][0] == last:
+        for j in range(1, len(out) - 1):
+            if out[j - 1][0] != last and out[j][0] != last:
+                out.insert(j, out.pop())
                 break
-        if chosen is None:
-            return lib  # shouldn't happen after feasibility check
-
-        result.append(groups[chosen].pop(0))
-        prev_artist = chosen
-
-    # Check cyclic seam and try swap fix
-    if _artist(result[0]) == _artist(result[-1]):
-        fixed = _fix_cyclic_seam(result)
-        if fixed is not None:
-            return fixed
-
-    return result
-
-
-def _fix_cyclic_seam(result):
-    """Try to fix a bad seam by swapping the last item with an interior item.
-
-    Returns a new list with a clean cyclic seam, or None if no swap works.
-    """
-    n = len(result)
-    last_artist = _artist(result[-1])
-
-    for i in range(1, n - 1):
-        if _artist(result[i]) == last_artist:
-            continue
-        # Swap result[i] and result[-1]
-        new_result = list(result)
-        new_result[i], new_result[-1] = new_result[-1], new_result[i]
-        # Check all adjacencies
-        clean = True
-        for j in range(n - 1):
-            if _artist(new_result[j]) == _artist(new_result[j + 1]):
-                clean = False
-                break
-        if clean and _artist(new_result[0]) != _artist(new_result[-1]):
-            return new_result
-
-    return None
+    return [item for _, item in out]
 
 
 def schedule_for(manifest, num):
     """Deterministic play order for channel `num`: sort by id, seeded shuffle,
-    then separate consecutive same-artist pairs."""
+    then space out repeated artists."""
     vids = manifest.get("videos") if isinstance(manifest, dict) else manifest
     vids = vids or []
     chans = manifest.get("channels") if isinstance(manifest, dict) else None
@@ -140,7 +82,7 @@ def schedule_for(manifest, num):
     for i in range(len(items) - 1, 0, -1):
         j = int(rnd() * (i + 1))
         items[i], items[j] = items[j], items[i]
-    return _separate_consecutive(items)
+    return _separate_artists(items)
 
 
 def on_air(lib, now_sec):
