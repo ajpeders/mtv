@@ -34,9 +34,8 @@ def js_function(name):
 HARNESS = r"""
 %(mulberry32)s
 %(creditText)s
-%(itemArtist)s
-%(separateConsecutive)s
-%(fixCyclicSeam)s
+%(artistKey)s
+%(separateArtists)s
 var EPOCH = 365472000, SEED = 1981;
 function scheduleFor(manifest, num) {
   var vids = manifest.videos || manifest;
@@ -51,7 +50,7 @@ function scheduleFor(manifest, num) {
     var j = Math.floor(rnd() * (i + 1));
     var t = items[i]; items[i] = items[j]; items[j] = t;
   }
-  return separateConsecutive(items);
+  return separateArtists(items);
 }
 function onAir(lib, nowSec) {
   var total = lib.reduce(function (s, it) { return s + it.duration; }, 0);
@@ -79,21 +78,21 @@ class Parity(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.manifest = json.loads(FIXTURE.read_text())
+        cls.crowded = crowded_manifest()
         harness = HARNESS % {
             "mulberry32": js_function("mulberry32"),
             "creditText": js_function("creditText"),
-            "itemArtist": js_function("itemArtist"),
-            "separateConsecutive": js_function("separateConsecutive"),
-            "fixCyclicSeam": js_function("fixCyclicSeam"),
+            "artistKey": js_function("artistKey"),
+            "separateArtists": js_function("separateArtists"),
         }
         payload = json.dumps({
             "manifest": cls.manifest,
             "channels": CHANNELS,
             "timestamps": TIMESTAMPS,
         })
-        result = subprocess.run(["node", "-e", harness], input=payload, text=True,
-                                capture_output=True, check=True)
-        cls.js = json.loads(result.stdout)
+        cls.js = run_js(harness, payload)
+        cls.js_crowded = run_js(harness, json.dumps({
+            "manifest": cls.crowded, "channels": [1], "timestamps": TIMESTAMPS}))
 
     def test_order_matches_js(self):
         for num in CHANNELS:
@@ -134,249 +133,91 @@ class Parity(unittest.TestCase):
         self.assertEqual(len(schedule.schedule_for(self.manifest, 4)), 8)
         self.assertIsNone(schedule.on_air([], 0))
 
-    def test_no_consecutive_same_artist(self):
-        """After separation, no two neighbours should share an artist."""
-        for num in CHANNELS:
-            lib = schedule.schedule_for(self.manifest, num)
-            if len(lib) < 2:
-                continue
-            for i in range(len(lib) - 1):
-                a = schedule._artist(lib[i])
-                b = schedule._artist(lib[i + 1])
-                self.assertNotEqual(a, b,
-                                    f"ch {num}: consecutive '{a}' at pos {i},{i+1}")
+    def test_crowded_order_matches_js(self):
+        library = schedule.schedule_for(self.crowded, 1)
+        self.assertEqual([item["id"] for item in library], self.js_crowded["order"]["1"])
 
-    def test_separation_small_lib(self):
-        """Libraries with < 3 items should pass through unchanged."""
-        small = {"videos": [
-            {"id": "a", "title": "A - Song A", "duration": 60},
-            {"id": "b", "title": "B - Song B", "duration": 60},
-        ], "channels": {"1": ["a", "b"]}}
-        lib = schedule.schedule_for(small, 1)
-        self.assertEqual(len(lib), 2)
 
-    def test_separation_all_same_artist(self):
-        """If every item shares an artist, the list is unchanged."""
-        same = {"videos": [
-            {"id": "x1", "title": "Drake - Song 1", "duration": 60, "artist": "Drake"},
-            {"id": "x2", "title": "Drake - Song 2", "duration": 60, "artist": "Drake"},
-            {"id": "x3", "title": "Drake - Song 3", "duration": 60, "artist": "Drake"},
-        ], "channels": {"1": ["x1", "x2", "x3"]}}
-        lib = schedule.schedule_for(same, 1)
-        self.assertEqual(len(lib), 3)  # still 3, nothing removed
+def run_js(harness, payload):
+    result = subprocess.run(["node", "-e", harness], input=payload, text=True,
+                            capture_output=True, check=True)
+    return json.loads(result.stdout)
 
-    def test_determinism_across_runs(self):
-        """schedule_for must be stable: same input → same output."""
-        lib1 = schedule.schedule_for(self.manifest, 2)
-        lib2 = schedule.schedule_for(self.manifest, 2)
-        self.assertEqual([it["id"] for it in lib1],
-                         [it["id"] for it in lib2])
 
-    def test_library_addition_includes_all_items(self):
-        """Adding a video must keep every existing item in the schedule."""
-        ch1_ids = self.manifest["channels"]["1"]
-        base_lib = schedule.schedule_for(self.manifest, 1)
-        base_ids = set(it["id"] for it in base_lib)
-        # Add a new video to channel 1
-        extra = {"id": "zzz999", "title": "New Artist - New Song", "duration": 120,
-                 "artist": "New Artist"}
-        new_videos = self.manifest["videos"] + [extra]
-        new_channels = dict(self.manifest["channels"])
-        new_channels["1"] = ch1_ids + ["zzz999"]
-        new_manifest = {"videos": new_videos, "channels": new_channels}
-        new_lib = schedule.schedule_for(new_manifest, 1)
-        new_ids = set(it["id"] for it in new_lib)
-        # All base items plus the new one must be present
-        self.assertIn("zzz999", new_ids)
-        self.assertEqual(base_ids, new_ids - {"zzz999"})
+def crowded_manifest():
+    """60 videos, 7 artists (one with 14 songs), case and dash variants, and
+    videos with no artist: the shuffle alone puts artists back to back."""
+    names = ["Drake", "DRAKE ", "Muse", "Blur", "Cher", "Abba", "Toto", "Kiss"]
+    videos = []
+    for i in range(60):
+        name = names[i % len(names)] if i % 9 else names[0]
+        title = f"{name} – Song {i}" if i % 5 else f"{name} - Song {i} (Official Video)"
+        if i % 13 == 0:
+            title = f"untitled clip {i}"
+        videos.append({"id": f"v{i:02d}", "title": title, "duration": 100 + i})
+    return {"videos": videos, "channels": {"1": [v["id"] for v in videos]}}
 
-    def test_separation_aabbb_feasible(self):
-        """AABBB (2 A, 3 B) is linearly feasible — no consecutive same-artist
-        in linear order. Cyclic seam is impossible (3 > floor(5/2)=2) so the
-        algorithm returns the best linear arrangement."""
-        lib = [
-            {"id": "a1", "title": "A - Song 1", "duration": 60},
-            {"id": "a2", "title": "A - Song 2", "duration": 60},
-            {"id": "b1", "title": "B - Song 1", "duration": 60},
-            {"id": "b2", "title": "B - Song 2", "duration": 60},
-            {"id": "b3", "title": "B - Song 3", "duration": 60},
-        ]
-        result = schedule._separate_consecutive(lib)
-        self.assertEqual(len(result), 5)
-        for i in range(len(result) - 1):
-            self.assertNotEqual(schedule._artist(result[i]),
-                                schedule._artist(result[i + 1]),
-                                f"consecutive at {i},{i+1}")
 
-    def test_separation_aaaab_impossible(self):
-        """AAAAB (4 A, 1 B) is impossible — list returned unchanged."""
-        lib = [
-            {"id": "a1", "title": "A - Song 1", "duration": 60},
-            {"id": "a2", "title": "A - Song 2", "duration": 60},
-            {"id": "a3", "title": "A - Song 3", "duration": 60},
-            {"id": "a4", "title": "A - Song 4", "duration": 60},
-            {"id": "b1", "title": "B - Song 1", "duration": 60},
-        ]
-        result = schedule._separate_consecutive(lib)
-        self.assertEqual(len(result), 5)
-        # Should be unchanged (majority > ceil(5/2)=3)
-        self.assertEqual([schedule._artist(r) for r in result],
-                         ["A", "A", "A", "A", "B"])
+def make_lib(artists):
+    return [{"id": f"{a}{i}", "title": f"{a} - Song {i}", "duration": 60}
+            for i, a in enumerate(artists)]
 
-    def test_separation_cyclic_wraparound(self):
-        """Linear order is clean but last==first artist — seam must be fixed."""
-        # AABC: linear order ABCA has clean adjacencies but seam A→A
-        lib = [
-            {"id": "a1", "title": "A - Song 1", "duration": 60},
-            {"id": "a2", "title": "A - Song 2", "duration": 60},
-            {"id": "b1", "title": "B - Song 1", "duration": 60},
-            {"id": "c1", "title": "C - Song 1", "duration": 60},
-        ]
-        result = schedule._separate_consecutive(lib)
-        self.assertEqual(len(result), 4)
-        for i in range(len(result) - 1):
-            self.assertNotEqual(schedule._artist(result[i]),
-                                schedule._artist(result[i + 1]))
-        self.assertNotEqual(schedule._artist(result[0]),
-                            schedule._artist(result[-1]))
 
-    def test_separation_two_items(self):
-        """Two different items pass through unchanged."""
-        lib = [
-            {"id": "a1", "title": "A - Song 1", "duration": 60},
-            {"id": "b1", "title": "B - Song 1", "duration": 60},
-        ]
-        result = schedule._separate_consecutive(lib)
-        self.assertEqual(len(result), 2)
+def repeats(lib, cyclic=True):
+    """Indexes i where lib[i] and the next song share an artist."""
+    keys = [schedule._artist_key(it) for it in lib]
+    pairs = len(keys) if cyclic and len(keys) > 2 else len(keys) - 1
+    return [i for i in range(max(pairs, 0)) if keys[i] == keys[(i + 1) % len(keys)]]
 
-    def test_separation_three_items_all_different(self):
-        """Three different artists pass through unchanged."""
-        lib = [
-            {"id": "a1", "title": "A - Song 1", "duration": 60},
-            {"id": "b1", "title": "B - Song 1", "duration": 60},
-            {"id": "c1", "title": "C - Song 1", "duration": 60},
-        ]
-        result = schedule._separate_consecutive(lib)
-        self.assertEqual(len(result), 3)
-        for i in range(len(result) - 1):
-            self.assertNotEqual(schedule._artist(result[i]),
-                                schedule._artist(result[i + 1]))
-        self.assertNotEqual(schedule._artist(result[0]),
-                            schedule._artist(result[-1]))
 
-    def test_separation_even_split(self):
-        """Even split (AAABBB) must produce no consecutive pairs."""
-        lib = [
-            {"id": "a1", "title": "A - Song 1", "duration": 60},
-            {"id": "a2", "title": "A - Song 2", "duration": 60},
-            {"id": "a3", "title": "A - Song 3", "duration": 60},
-            {"id": "b1", "title": "B - Song 1", "duration": 60},
-            {"id": "b2", "title": "B - Song 2", "duration": 60},
-            {"id": "b3", "title": "B - Song 3", "duration": 60},
-        ]
-        result = schedule._separate_consecutive(lib)
-        self.assertEqual(len(result), 6)
-        for i in range(len(result) - 1):
-            self.assertNotEqual(schedule._artist(result[i]),
-                                schedule._artist(result[i + 1]))
-        self.assertNotEqual(schedule._artist(result[0]),
-                            schedule._artist(result[-1]))
+class Separation(unittest.TestCase):
+    def test_crowded_channel_has_no_repeats(self):
+        lib = schedule.schedule_for(crowded_manifest(), 1)
+        self.assertEqual(len(lib), 60)
+        self.assertEqual(repeats(lib), [])
 
-    def test_separation_aabbcc_feasible(self):
-        """AABBCC (2 of each) is feasible — greedy interleaving must separate.
+    def test_case_and_whitespace_count_as_the_same_artist(self):
+        self.assertEqual(schedule._artist_key({"id": "a", "title": "DRAKE  - X"}),
+                         schedule._artist_key({"id": "b", "title": "x", "artist": "drake"}))
 
-        Regression for t_c173b54b: static one-time artist sorting exhausted
-        early artists and returned the original list unchanged.
-        """
-        lib = [
-            {"id": "a1", "title": "A - Song 1", "duration": 60},
-            {"id": "a2", "title": "A - Song 2", "duration": 60},
-            {"id": "b1", "title": "B - Song 1", "duration": 60},
-            {"id": "b2", "title": "B - Song 2", "duration": 60},
-            {"id": "c1", "title": "C - Song 1", "duration": 60},
-            {"id": "c2", "title": "C - Song 2", "duration": 60},
-        ]
-        result = schedule._separate_consecutive(lib)
-        self.assertEqual(len(result), 6)
-        for i in range(len(result) - 1):
-            self.assertNotEqual(schedule._artist(result[i]),
-                                schedule._artist(result[i + 1]),
-                                f"consecutive at {i},{i+1}")
-        self.assertNotEqual(schedule._artist(result[0]),
-                            schedule._artist(result[-1]))
+    def test_unknown_artists_never_count_as_repeats(self):
+        lib = [{"id": f"u{i}", "title": f"clip {i}", "duration": 60} for i in range(4)]
+        self.assertEqual(schedule._separate_artists(list(lib)), lib)
 
-    def test_schedule_for_aabbcc(self):
-        """Full schedule_for path on six IDs AABBCC — must separate."""
-        manifest = {
-            "videos": [
-                {"id": "a1", "title": "A - Song 1", "duration": 60, "artist": "A"},
-                {"id": "a2", "title": "A - Song 2", "duration": 60, "artist": "A"},
-                {"id": "b1", "title": "B - Song 1", "duration": 60, "artist": "B"},
-                {"id": "b2", "title": "B - Song 2", "duration": 60, "artist": "B"},
-                {"id": "c1", "title": "C - Song 1", "duration": 60, "artist": "C"},
-                {"id": "c2", "title": "C - Song 2", "duration": 60, "artist": "C"},
-            ],
-            "channels": {"1": ["a1", "a2", "b1", "b2", "c1", "c2"]},
-        }
-        lib = schedule.schedule_for(manifest, 1)
-        self.assertEqual(len(lib), 6)
-        for i in range(len(lib) - 1):
-            self.assertNotEqual(schedule._artist(lib[i]),
-                                schedule._artist(lib[i + 1]),
-                                f"consecutive at {i},{i+1}")
+    def test_no_repeats_keeps_the_shuffle(self):
+        lib = make_lib("ABCDEFGH")
+        self.assertEqual(schedule._separate_artists(list(lib)), lib)
 
-    def test_feasible_distribution_property(self):
-        """For all small n ≤ 8 with feasible artist distributions,
-        _separate_consecutive must produce linearly clean output."""
+    def test_moves_as_little_as_possible(self):
+        ids = [it["id"] for it in schedule._separate_artists(make_lib("ABBCD"))]
+        self.assertEqual(ids, ["A0", "B1", "C3", "B2", "D4"])
+
+    def test_old_swap_pass_failure(self):
+        # the first version left this back to back
+        lib = schedule._separate_artists(make_lib("CABAA"))
+        self.assertEqual(repeats(lib, cyclic=False), [])
+
+    def test_seam(self):
+        lib = schedule._separate_artists(make_lib("AABC"))
+        self.assertEqual(repeats(lib), [])
+
+    def test_impossible_keeps_every_song(self):
+        lib = schedule._separate_artists(make_lib("AAAAB"))
+        self.assertEqual(sorted(it["id"] for it in lib), ["A0", "A1", "A2", "A3", "B4"])
+
+    def test_every_small_feasible_library(self):
+        """Every order of every artist mix up to 7 songs: no repeats in a row
+        when that's possible, and none across the seam when that is too."""
         import itertools
-
-        artists = ["A", "B", "C", "D"]
-        for n in range(3, 9):
-            # Generate all multisets of size n from artists
-            for combo in itertools.combinations_with_replacement(artists, n):
-                counts = [combo.count(a) for a in artists]
-                max_count = max(counts)
-                if max_count <= (n + 1) // 2:
-                    # Build lib
-                    lib = []
-                    for idx, art in enumerate(combo):
-                        lib.append({"id": f"{art}{idx}", "title": f"{art} - S", "duration": 60})
-                    result = schedule._separate_consecutive(lib)
-                    for i in range(len(result) - 1):
-                        self.assertNotEqual(
-                            schedule._artist(result[i]),
-                            schedule._artist(result[i + 1]),
-                            f"n={n} combo={combo} consecutive at {i},{i+1}",
-                        )
-
-    def test_cyclic_seam_exhaustive(self):
-        """Cyclic seam fix: for small cases where cyclic separation is also
-        feasible (max_count <= floor(n/2)), the seam must always be clean."""
-        import itertools
-
-        artists = ["A", "B", "C"]
-        for n in range(3, 8):
-            for combo in itertools.combinations_with_replacement(artists, n):
-                counts = [combo.count(a) for a in artists]
-                max_count = max(counts)
-                if max_count <= n // 2:  # cyclically feasible (stricter than linear)
-                    lib = []
-                    for idx, art in enumerate(combo):
-                        lib.append({"id": f"{art}{idx}", "title": f"{art} - S", "duration": 60})
-                    result = schedule._separate_consecutive(lib)
-                    # Linear adjacencies must be clean
-                    for i in range(len(result) - 1):
-                        self.assertNotEqual(
-                            schedule._artist(result[i]),
-                            schedule._artist(result[i + 1]),
-                            f"linear consecutive n={n} combo={combo}",
-                        )
-                    # Cyclic seam must also be clean (seam fix applied)
-                    self.assertNotEqual(
-                        schedule._artist(result[0]),
-                        schedule._artist(result[-1]),
-                        f"cyclic seam n={n} combo={combo}",
-                    )
+        for n in range(1, 8):
+            for combo in itertools.product("ABCD", repeat=n):
+                top = max(combo.count(a) for a in set(combo))
+                lib = schedule._separate_artists(make_lib(combo))
+                self.assertEqual(len(lib), n)
+                if top <= (n + 1) // 2:
+                    self.assertEqual(repeats(lib, cyclic=False), [], combo)
+                if top <= n // 2:
+                    self.assertEqual(repeats(lib), [], combo)
 
 
 if __name__ == "__main__":

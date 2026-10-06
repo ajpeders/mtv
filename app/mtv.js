@@ -232,82 +232,45 @@
         return it.duration > 0 && (!ids || ids.indexOf(it.id) !== -1);
       });
     }
-    // Extract artist from an item (manifest object or title-only)
-    function itemArtist(it) {
-      var artist = (it && it.artist) || "";
-      if (artist) return artist;
-      var title = it && it.title || "";
-      var split = title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
-      return split ? split[1] : "";
+    // Space out artists: reorder so one artist never plays twice in a row,
+    // nor across the loop seam (last -> first), keeping the shuffle's order
+    // wherever it can. admin/schedule.py ports this; change both together.
+    function artistKey(it) {
+      // a video with no known artist gets a key of its own: never a repeat
+      return creditText(it).artist.trim().toLowerCase() || "\0" + it.id;
     }
-    // Deterministic pass: rearrange to avoid consecutive same-artist pairs.
-    // Uses a greedy max-count interleaving approach. Guarantees no consecutive
-    // same-artist pairs in the linear order when feasible (no artist has more
-    // than ceil(n/2) items). After building the linear order, checks the cyclic
-    // seam (last→first). If the seam repeats an artist, attempts a swap fix:
-    // tries swapping the last item with each interior item to find a valid
-    // cyclic arrangement. If no swap works, returns the linearly optimal result
-    // — the distribution may be cyclically impossible (e.g. AABBB with 5 items,
-    // B=3 > floor(5/2)=2). See regression tests for feasible/impossible examples.
-    function separateConsecutive(items) {
-      var n = items.length;
-      if (n < 3) return items;
-      // Group items by artist
-      var groups = {};
-      for (var i = 0; i < n; i++) {
-        var art = itemArtist(items[i]);
-        if (!groups[art]) groups[art] = [];
-        groups[art].push(items[i]);
+    function separateArtists(items) {
+      var rest = items.map(function (it) { return { k: artistKey(it), it: it }; });
+      var left = Object.create(null);
+      rest.forEach(function (r) { left[r.k] = (left[r.k] || 0) + 1; });
+      var out = [], prev = null;
+      while (rest.length) {
+        // an artist holding more than half of what's left has to go now, or
+        // it can't be spaced out later
+        var must = null;
+        for (var k in left) if (2 * left[k] > rest.length) must = k;
+        if (must === prev) must = null;
+        var pick = 0;
+        for (var i = 0; i < rest.length; i++) {
+          if (rest[i].k !== prev && (must === null || rest[i].k === must)) { pick = i; break; }
+        }
+        var r = rest.splice(pick, 1)[0];
+        left[r.k]--;
+        out.push(r);
+        prev = r.k;
       }
-      // Check linear feasibility
-      var maxCount = 0;
-      for (var art in groups) {
-        if (groups[art].length > maxCount) maxCount = groups[art].length;
-      }
-      if (maxCount > Math.ceil(n / 2)) return items;
-      // Greedy interleaving: always pick the artist with most remaining items
-      // that isn't the previous artist
-      var result = [];
-      var prev = null;
-      while (result.length < n) {
-        // Re-sort by remaining count descending, ties by name
-        var artists = Object.keys(groups).sort(function (a, b) {
-          if (groups[b].length !== groups[a].length) return groups[b].length - groups[a].length;
-          return a < b ? -1 : 1;
-        });
-        var chosen = null;
-        for (var ai = 0; ai < artists.length; ai++) {
-          if (artists[ai] !== prev && groups[artists[ai]].length > 0) {
-            chosen = artists[ai];
+      // the channel loops: move a last song that matches the first into a
+      // gap between two other artists
+      var n = out.length;
+      if (n > 2 && out[0].k === out[n - 1].k) {
+        for (var j = 1; j < n - 1; j++) {
+          if (out[j - 1].k !== out[n - 1].k && out[j].k !== out[n - 1].k) {
+            out.splice(j, 0, out.pop());
             break;
           }
         }
-        if (chosen === null) return items; // shouldn't happen after feasibility check
-        result.push(groups[chosen].shift());
-        prev = chosen;
       }
-      // Check cyclic seam and try swap fix
-      if (itemArtist(result[0]) === itemArtist(result[n - 1])) {
-        var fixed = fixCyclicSeam(result);
-        if (fixed) return fixed;
-      }
-      return result;
-    }
-    function fixCyclicSeam(result) {
-      var n = result.length;
-      var lastArt = itemArtist(result[n - 1]);
-      for (var i = 1; i < n - 1; i++) {
-        if (itemArtist(result[i]) === lastArt) continue;
-        var tmp = result[i]; result[i] = result[n - 1]; result[n - 1] = tmp;
-        var clean = true;
-        for (var j = 0; j < n - 1; j++) {
-          if (itemArtist(result[j]) === itemArtist(result[j + 1])) { clean = false; break; }
-        }
-        if (clean && itemArtist(result[0]) !== itemArtist(result[n - 1])) return result;
-        // undo swap
-        tmp = result[i]; result[i] = result[n - 1]; result[n - 1] = tmp;
-      }
-      return null;
+      return out.map(function (r) { return r.it; });
     }
     function buildLib() {
       var items = libFor(chIdx);
@@ -319,7 +282,7 @@
         var j = Math.floor(rnd() * (i + 1));
         var t = items[i]; items[i] = items[j]; items[j] = t;
       }
-      lib = separateConsecutive(items);
+      lib = separateArtists(items);
     }
     adopt(manifest0);
     // a remembered channel can be empty (playlist not filled in yet, or its
