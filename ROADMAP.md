@@ -34,6 +34,9 @@ are all live and stable.
   (key `c`) switches to a plain picture: no scanlines, vignette, hum or
   overscan zoom (the YouTube iframe keeps its zoom to crop YouTube's chrome).
   Spec: `docs/superpowers/specs/2026-10-03-volume-control-design.md`.
+- Artist spacing (2026-10-06): the shuffle never plays one artist twice in
+  a row, nor across the loop seam, while keeping the shuffled order wherever
+  it can. Same pass in `mtv.js` and `admin/schedule.py`, parity-tested.
 - Standalone deploy + files mode (live 2026-10-02, 5b50050):
   `docker-compose.standalone.yml` runs anywhere on one port; `MTV_SOURCE=files`
   airs a folder of mp4s with subfolders as channels; `sync.sh fetch` downloads

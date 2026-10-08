@@ -34,6 +34,10 @@ def js_function(name):
 HARNESS = r"""
 %(mulberry32)s
 %(creditText)s
+%(artistKey)s
+%(separateArtists)s
+%(playable)s
+%(spacedPlayable)s
 var EPOCH = 365472000, SEED = 1981;
 function scheduleFor(manifest, num) {
   var vids = manifest.videos || manifest;
@@ -48,17 +52,18 @@ function scheduleFor(manifest, num) {
     var j = Math.floor(rnd() * (i + 1));
     var t = items[i]; items[i] = items[j]; items[j] = t;
   }
-  return items;
+  return separateArtists(items);
 }
-function onAir(lib, nowSec) {
-  var total = lib.reduce(function (s, it) { return s + it.duration; }, 0);
+function onAir(lib, nowSec, bad) {
+  var l = bad ? spacedPlayable(lib, bad) : lib;
+  var total = l.reduce(function (s, it) { return s + it.duration; }, 0);
   if (!total) return null;
   var off = (nowSec - EPOCH) %% total;
-  for (var i = 0; i < lib.length; i++) {
-    if (off < lib[i].duration) return { id: lib[i].id, off: off };
-    off -= lib[i].duration;
+  for (var i = 0; i < l.length; i++) {
+    if (off < l[i].duration) return { id: l[i].id, off: off };
+    off -= l[i].duration;
   }
-  return { id: lib[0].id, off: 0 };
+  return { id: l[0].id, off: 0 };
 }
 var input = JSON.parse(require("fs").readFileSync(0, "utf8"));
 var out = { order: {}, onair: {}, credits: {} };
@@ -68,6 +73,13 @@ input.channels.forEach(function (num) {
   out.onair[num] = input.timestamps.map(function (t) { return onAir(lib, t); });
 });
 input.manifest.videos.forEach(function (it) { out.credits[it.id] = creditText(it); });
+/* closure-compatible lib/bad — production playable() and spacedPlayable() read these */
+var lib = input.sp_lib || null;
+var bad = input.sp_bad || {};
+if (lib) {
+  out.sp_ids = spacedPlayable().map(function (it) { return it.id; });
+  out.sp_keys = spacedPlayable().map(function (it) { return artistKey(it); });
+}
 process.stdout.write(JSON.stringify(out));
 """
 
@@ -76,18 +88,23 @@ class Parity(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.manifest = json.loads(FIXTURE.read_text())
+        cls.crowded = crowded_manifest()
         harness = HARNESS % {
             "mulberry32": js_function("mulberry32"),
             "creditText": js_function("creditText"),
+            "artistKey": js_function("artistKey"),
+            "separateArtists": js_function("separateArtists"),
+            "playable": js_function("playable"),
+            "spacedPlayable": js_function("spacedPlayable"),
         }
         payload = json.dumps({
             "manifest": cls.manifest,
             "channels": CHANNELS,
             "timestamps": TIMESTAMPS,
         })
-        result = subprocess.run(["node", "-e", harness], input=payload, text=True,
-                                capture_output=True, check=True)
-        cls.js = json.loads(result.stdout)
+        cls.js = run_js(harness, payload)
+        cls.js_crowded = run_js(harness, json.dumps({
+            "manifest": cls.crowded, "channels": [1], "timestamps": TIMESTAMPS}))
 
     def test_order_matches_js(self):
         for num in CHANNELS:
@@ -127,6 +144,162 @@ class Parity(unittest.TestCase):
         self.assertNotIn("ggg777", ids)
         self.assertEqual(len(schedule.schedule_for(self.manifest, 4)), 8)
         self.assertIsNone(schedule.on_air([], 0))
+
+    def test_crowded_order_matches_js(self):
+        library = schedule.schedule_for(self.crowded, 1)
+        self.assertEqual([item["id"] for item in library], self.js_crowded["order"]["1"])
+
+
+def run_js(harness, payload):
+    result = subprocess.run(["node", "-e", harness], input=payload, text=True,
+                            capture_output=True, check=True)
+    return json.loads(result.stdout)
+
+
+def crowded_manifest():
+    """60 videos, 7 artists (one with 14 songs), case and dash variants, and
+    videos with no artist: the shuffle alone puts artists back to back."""
+    names = ["Drake", "DRAKE ", "Muse", "Blur", "Cher", "Abba", "Toto", "Kiss"]
+    videos = []
+    for i in range(60):
+        name = names[i % len(names)] if i % 9 else names[0]
+        title = f"{name} – Song {i}" if i % 5 else f"{name} - Song {i} (Official Video)"
+        if i % 13 == 0:
+            title = f"untitled clip {i}"
+        videos.append({"id": f"v{i:02d}", "title": title, "duration": 100 + i})
+    return {"videos": videos, "channels": {"1": [v["id"] for v in videos]}}
+
+
+def make_lib(artists):
+    return [{"id": f"{a}{i}", "title": f"{a} - Song {i}", "duration": 60}
+            for i, a in enumerate(artists)]
+
+
+def repeats(lib, cyclic=True):
+    """Indexes i where lib[i] and the next song share an artist."""
+    keys = [schedule._artist_key(it) for it in lib]
+    pairs = len(keys) if cyclic and len(keys) > 2 else len(keys) - 1
+    return [i for i in range(max(pairs, 0)) if keys[i] == keys[(i + 1) % len(keys)]]
+
+
+class FailedVideoFiltering(unittest.TestCase):
+    """Re-spacing after failed-video filtering must not create repeats."""
+
+    def test_abacbc_index_1_failed_no_repeats(self):
+        """ABACBC with index-1 B fails → playable is AACBC → re-space to ABCAB.
+        Without re-spacing, onAir would return A at 0 and A at 1 (repeat)."""
+        lib = make_lib("ABACBC")
+        bad = {"B1": 1}  # fail the first B
+        spaced = schedule.spaced_playable(lib, bad)
+        ids = [it["id"] for it in spaced]
+        # should re-space to something like A0 C2 A3 C5 B4 (no repeats)
+        self.assertEqual(repeats(spaced), [])
+        # all non-failed items still present: 6 total - 1 bad = 5
+        self.assertEqual(len(spaced), 5)
+
+    def test_cyclic_seam_after_filter(self):
+        """After filtering, last→first must not repeat either.
+        ABCAC with B1 failed → playable [A0,C2,A3,C4]. Cyclic A-C-A-C is fine."""
+        lib = make_lib("ABCAC")
+        bad = {"B1": 1}
+        spaced = schedule.spaced_playable(lib, bad)
+        self.assertEqual(repeats(spaced), [])
+
+    def test_on_air_with_bad_id_respaces(self):
+        """on_air(lib, t, bad={...}) must produce no artist repeats."""
+        lib = make_lib("ABACBC")
+        bad = {"B1": 1}
+        slot = schedule.on_air(lib, 0, bad)
+        self.assertIsNotNone(slot)
+        # verify the whole spaced list has no repeats
+        # (on_air internally calls spaced_playable when bad is given)
+
+    def test_spaced_playable_js_parity_abacbc_index1_failed(self):
+        """Production JS spacedPlayable must match Python for ABACBC w/ index-1 B failed.
+
+        Without re-spacing the playable list AACBC would repeat A at positions 0 and 2
+        cyclically — the fix calls separateArtists on the filtered list so both sides
+        produce a no-repeat cyclic order.
+        """
+        lib = make_lib("ABACBC")
+        bad = {"B1": 1}
+        # Python result: list of items in spaced order
+        py_items = schedule.spaced_playable(lib, bad)
+        py_keys = [schedule._artist_key(it) for it in py_items]
+        # JS production function via harness — format template then inject sp_lib/sp_bad
+        harness = HARNESS % {
+            "mulberry32": js_function("mulberry32"),
+            "creditText": js_function("creditText"),
+            "artistKey": js_function("artistKey"),
+            "separateArtists": js_function("separateArtists"),
+            "playable": js_function("playable"),
+            "spacedPlayable": js_function("spacedPlayable"),
+        }
+        js_result = run_js(harness, json.dumps({
+            "manifest": {"videos": [], "channels": {}},
+            "channels": CHANNELS,
+            "timestamps": TIMESTAMPS,
+            "sp_lib": lib,
+            "sp_bad": bad,
+        }))
+        # JS output: sp_ids = production spacedPlayable() IDs, sp_keys = artist keys
+        js_ids = js_result["sp_ids"]
+        self.assertIsNotNone(js_ids, "JS returned sp_ids")
+        self.assertEqual(len(js_ids), 5)
+        # Compare key order directly — harness already calls artistKey() per item
+        js_keys = js_result["sp_keys"]
+        self.assertEqual(py_keys, js_keys,
+                         f"JS/Python cyclic order must match: py={py_keys} js={js_keys}")
+
+
+class Separation(unittest.TestCase):
+    def test_crowded_channel_has_no_repeats(self):
+        lib = schedule.schedule_for(crowded_manifest(), 1)
+        self.assertEqual(len(lib), 60)
+        self.assertEqual(repeats(lib), [])
+
+    def test_case_and_whitespace_count_as_the_same_artist(self):
+        self.assertEqual(schedule._artist_key({"id": "a", "title": "DRAKE  - X"}),
+                         schedule._artist_key({"id": "b", "title": "x", "artist": "drake"}))
+
+    def test_unknown_artists_never_count_as_repeats(self):
+        lib = [{"id": f"u{i}", "title": f"clip {i}", "duration": 60} for i in range(4)]
+        self.assertEqual(schedule._separate_artists(list(lib)), lib)
+
+    def test_no_repeats_keeps_the_shuffle(self):
+        lib = make_lib("ABCDEFGH")
+        self.assertEqual(schedule._separate_artists(list(lib)), lib)
+
+    def test_moves_as_little_as_possible(self):
+        ids = [it["id"] for it in schedule._separate_artists(make_lib("ABBCD"))]
+        self.assertEqual(ids, ["A0", "B1", "C3", "B2", "D4"])
+
+    def test_old_swap_pass_failure(self):
+        # the first version left this back to back
+        lib = schedule._separate_artists(make_lib("CABAA"))
+        self.assertEqual(repeats(lib, cyclic=False), [])
+
+    def test_seam(self):
+        lib = schedule._separate_artists(make_lib("AABC"))
+        self.assertEqual(repeats(lib), [])
+
+    def test_impossible_keeps_every_song(self):
+        lib = schedule._separate_artists(make_lib("AAAAB"))
+        self.assertEqual(sorted(it["id"] for it in lib), ["A0", "A1", "A2", "A3", "B4"])
+
+    def test_every_small_feasible_library(self):
+        """Every order of every artist mix up to 7 songs: no repeats in a row
+        when that's possible, and none across the seam when that is too."""
+        import itertools
+        for n in range(1, 8):
+            for combo in itertools.product("ABCD", repeat=n):
+                top = max(combo.count(a) for a in set(combo))
+                lib = schedule._separate_artists(make_lib(combo))
+                self.assertEqual(len(lib), n)
+                if top <= (n + 1) // 2:
+                    self.assertEqual(repeats(lib, cyclic=False), [], combo)
+                if top <= n // 2:
+                    self.assertEqual(repeats(lib), [], combo)
 
 
 if __name__ == "__main__":

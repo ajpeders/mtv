@@ -232,6 +232,46 @@
         return it.duration > 0 && (!ids || ids.indexOf(it.id) !== -1);
       });
     }
+    // Space out artists: reorder so one artist never plays twice in a row,
+    // nor across the loop seam (last -> first), keeping the shuffle's order
+    // wherever it can. admin/schedule.py ports this; change both together.
+    function artistKey(it) {
+      // a video with no known artist gets a key of its own: never a repeat
+      return creditText(it).artist.trim().toLowerCase() || "\0" + it.id;
+    }
+    function separateArtists(items) {
+      var rest = items.map(function (it) { return { k: artistKey(it), it: it }; });
+      var left = Object.create(null);
+      rest.forEach(function (r) { left[r.k] = (left[r.k] || 0) + 1; });
+      var out = [], prev = null;
+      while (rest.length) {
+        // an artist holding more than half of what's left has to go now, or
+        // it can't be spaced out later
+        var must = null;
+        for (var k in left) if (2 * left[k] > rest.length) must = k;
+        if (must === prev) must = null;
+        var pick = 0;
+        for (var i = 0; i < rest.length; i++) {
+          if (rest[i].k !== prev && (must === null || rest[i].k === must)) { pick = i; break; }
+        }
+        var r = rest.splice(pick, 1)[0];
+        left[r.k]--;
+        out.push(r);
+        prev = r.k;
+      }
+      // the channel loops: move a last song that matches the first into a
+      // gap between two other artists
+      var n = out.length;
+      if (n > 2 && out[0].k === out[n - 1].k) {
+        for (var j = 1; j < n - 1; j++) {
+          if (out[j - 1].k !== out[n - 1].k && out[j].k !== out[n - 1].k) {
+            out.splice(j, 0, out.pop());
+            break;
+          }
+        }
+      }
+      return out.map(function (r) { return r.it; });
+    }
     function buildLib() {
       var items = libFor(chIdx);
       items.sort(function (a, b) { return a.id < b.id ? -1 : 1; });
@@ -242,7 +282,7 @@
         var j = Math.floor(rnd() * (i + 1));
         var t = items[i]; items[i] = items[j]; items[j] = t;
       }
-      lib = items;
+      lib = separateArtists(items);
     }
     adopt(manifest0);
     // a remembered channel can be empty (playlist not filled in yet, or its
@@ -256,9 +296,13 @@
     function playable() {
       return lib.filter(function (it) { return !bad[it.id]; });
     }
+    // filter failed videos then re-space so artist separation survives failures
+    function spacedPlayable() {
+      return separateArtists(playable());
+    }
     // what the channel is showing at this wall-clock moment
     function onAir() {
-      var l = playable();
+      var l = spacedPlayable();
       var total = l.reduce(function (s, it) { return s + it.duration; }, 0);
       if (!total) return null;
       var off = (Date.now() / 1000 - EPOCH) % total;
@@ -376,7 +420,7 @@
 
     // the video scheduled after the one airing now
     function expectedNext() {
-      var l = playable();
+      var l = spacedPlayable();
       if (!l.length) return null;
       for (var i = 0; i < l.length; i++) {
         if (l[i].id === currentId) return l[(i + 1) % l.length];
@@ -406,7 +450,7 @@
       currentId = prep;
       prep = null;
       var nowPlaying = null;
-      playable().forEach(function (it) { if (it.id === currentId) nowPlaying = it; });
+      spacedPlayable().forEach(function (it) { if (it.id === currentId) nowPlaying = it; });
       kickPlay(active);
       showOsd(nowPlaying);
       refreshLib(function () {}); // keep the library fresh in the background

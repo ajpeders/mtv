@@ -29,8 +29,47 @@ def mulberry32(seed):
     return rnd
 
 
+def _artist_key(item):
+    """Who sang it, for spacing: credit()'s artist, case-folded. A video with
+    no known artist gets a key of its own, so it never counts as a repeat."""
+    return credit(item)["artist"].strip().lower() or "\0" + str(item.get("id"))
+
+
+def _separate_artists(items):
+    """Port of separateArtists: reorder so one artist never plays twice in a
+    row, nor across the loop seam (last -> first), keeping the shuffle's order
+    wherever it can."""
+    rest = [(_artist_key(it), it) for it in items]
+    left = {}
+    for key, _ in rest:
+        left[key] = left.get(key, 0) + 1
+    out, prev = [], None
+    while rest:
+        # an artist holding more than half of what's left has to go now, or
+        # it can't be spaced out later
+        must = next((k for k, c in left.items() if 2 * c > len(rest)), None)
+        if must == prev:
+            must = None
+        pick = next((i for i, (k, _) in enumerate(rest)
+                     if k != prev and must in (None, k)), 0)
+        key, item = rest.pop(pick)
+        left[key] -= 1
+        out.append((key, item))
+        prev = key
+    # the channel loops: move a last song that matches the first into a gap
+    # between two other artists
+    last = out[-1][0] if out else None
+    if len(out) > 2 and out[0][0] == last:
+        for j in range(1, len(out) - 1):
+            if out[j - 1][0] != last and out[j][0] != last:
+                out.insert(j, out.pop())
+                break
+    return [item for _, item in out]
+
+
 def schedule_for(manifest, num):
-    """Deterministic play order for channel `num`: sort by id, seeded shuffle."""
+    """Deterministic play order for channel `num`: sort by id, seeded shuffle,
+    then space out repeated artists."""
     vids = manifest.get("videos") if isinstance(manifest, dict) else manifest
     vids = vids or []
     chans = manifest.get("channels") if isinstance(manifest, dict) else None
@@ -43,11 +82,21 @@ def schedule_for(manifest, num):
     for i in range(len(items) - 1, 0, -1):
         j = int(rnd() * (i + 1))
         items[i], items[j] = items[j], items[i]
-    return items
+    return _separate_artists(items)
 
 
-def on_air(lib, now_sec):
-    """Return the scheduled item and offset at `now_sec`, or None if empty."""
+def spaced_playable(lib, bad):
+    """Filter failed items then re-space so artist separation survives failures."""
+    playable = [it for it in lib if it.get("id") not in bad]
+    return _separate_artists(playable)
+
+
+def on_air(lib, now_sec, bad=None):
+    """Return the scheduled item and offset at `now_sec`, or None if empty.
+
+    If `bad` is provided, filter failed items and re-space before computing.
+    """
+    lib = spaced_playable(lib, bad) if bad else lib
     total = sum(it["duration"] for it in lib)
     if not total:
         return None
