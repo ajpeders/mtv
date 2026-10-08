@@ -296,9 +296,13 @@
     function playable() {
       return lib.filter(function (it) { return !bad[it.id]; });
     }
+    // filter failed videos then re-space so artist separation survives failures
+    function spacedPlayable() {
+      return separateArtists(playable());
+    }
     // what the channel is showing at this wall-clock moment
     function onAir() {
-      var l = playable();
+      var l = spacedPlayable();
       var total = l.reduce(function (s, it) { return s + it.duration; }, 0);
       if (!total) return null;
       var off = (Date.now() / 1000 - EPOCH) % total;
@@ -416,7 +420,7 @@
 
     // the video scheduled after the one airing now
     function expectedNext() {
-      var l = playable();
+      var l = spacedPlayable();
       if (!l.length) return null;
       for (var i = 0; i < l.length; i++) {
         if (l[i].id === currentId) return l[(i + 1) % l.length];
@@ -446,7 +450,7 @@
       currentId = prep;
       prep = null;
       var nowPlaying = null;
-      playable().forEach(function (it) { if (it.id === currentId) nowPlaying = it; });
+      spacedPlayable().forEach(function (it) { if (it.id === currentId) nowPlaying = it; });
       kickPlay(active);
       showOsd(nowPlaying);
       refreshLib(function () {}); // keep the library fresh in the background

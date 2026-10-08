@@ -85,8 +85,18 @@ def schedule_for(manifest, num):
     return _separate_artists(items)
 
 
-def on_air(lib, now_sec):
-    """Return the scheduled item and offset at `now_sec`, or None if empty."""
+def spaced_playable(lib, bad):
+    """Filter failed items then re-space so artist separation survives failures."""
+    playable = [it for it in lib if it.get("id") not in bad]
+    return _separate_artists(playable)
+
+
+def on_air(lib, now_sec, bad=None):
+    """Return the scheduled item and offset at `now_sec`, or None if empty.
+
+    If `bad` is provided, filter failed items and re-space before computing.
+    """
+    lib = spaced_playable(lib, bad) if bad else lib
     total = sum(it["duration"] for it in lib)
     if not total:
         return None
