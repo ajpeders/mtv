@@ -69,14 +69,21 @@ function onAir(lib, nowSec, bad) {
   }
   return { id: l[0].id, off: 0 };
 }
+function spacedPlayableOrder(lib, bad) {
+  var l = spacedPlayable(lib, bad);
+  return l.map(function (it) { return it.id; });
+}
 var input = JSON.parse(require("fs").readFileSync(0, "utf8"));
-var out = { order: {}, onair: {}, credits: {} };
+var out = { order: {}, onair: {}, credits: {}, sp_order: null };
 input.channels.forEach(function (num) {
   var lib = scheduleFor(input.manifest, num);
   out.order[num] = lib.map(function (it) { return it.id; });
   out.onair[num] = input.timestamps.map(function (t) { return onAir(lib, t); });
 });
 input.manifest.videos.forEach(function (it) { out.credits[it.id] = creditText(it); });
+if (input.sp_lib) {
+  out.sp_order = spacedPlayableOrder(input.sp_lib, input.sp_bad || null);
+}
 process.stdout.write(JSON.stringify(out));
 """
 
@@ -208,6 +215,41 @@ class FailedVideoFiltering(unittest.TestCase):
         self.assertIsNotNone(slot)
         # verify the whole spaced list has no repeats
         # (on_air internally calls spaced_playable when bad is given)
+
+    def test_spaced_playable_js_parity_abacbc_index1_failed(self):
+        """Production JS spacedPlayable must match Python for ABACBC w/ index-1 B failed.
+
+        Without re-spacing the playable list AACBC would repeat A at positions 0 and 2
+        cyclically — the fix calls separateArtists on the filtered list so both sides
+        produce a no-repeat cyclic order.
+        """
+        lib = make_lib("ABACBC")
+        bad = {"B1": 1}
+        # Python result: list of items in spaced order
+        py_items = schedule.spaced_playable(lib, bad)
+        py_keys = [schedule._artist_key(it) for it in py_items]
+        # JS production function via harness — format template then inject sp_lib/sp_bad
+        harness = HARNESS % {
+            "mulberry32": js_function("mulberry32"),
+            "creditText": js_function("creditText"),
+            "artistKey": js_function("artistKey"),
+            "separateArtists": js_function("separateArtists"),
+        }
+        js_result = run_js(harness, json.dumps({
+            "manifest": {"videos": [], "channels": {}},
+            "channels": CHANNELS,
+            "timestamps": TIMESTAMPS,
+            "sp_lib": lib,
+            "sp_bad": bad,
+        }))
+        js_order = js_result["sp_order"]
+        self.assertIsNotNone(js_order, "JS returned sp_order")
+        self.assertEqual(len(js_order), 5)
+        # JS key order: map each ID back to its artist key from lib
+        id_to_key = {it["id"]: schedule._artist_key(it) for it in lib}
+        js_keys = [id_to_key[jid] for jid in js_order]
+        self.assertEqual(py_keys, js_keys,
+                         f"JS/Python cyclic order must match: py={py_keys} js={js_keys}")
 
 
 class Separation(unittest.TestCase):
