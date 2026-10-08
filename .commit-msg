@@ -1,0 +1,7 @@
+MTv-SHUF-01: extract playable/spacedPlayable from production mtv.js
+
+Replace inline HARNESS definitions with js_function() extractions for
+playable and spacedPlayable, matching the existing pattern for
+mulberry32/creditText/artistKey/separateArtists. Updated harness to set
+closure-compatible var lib/var bad before calling spacedPlayable(), and
+updated the ABACBC parity test to read sp_ids/sp_keys from JS output.

@@ -36,6 +36,8 @@ HARNESS = r"""
 %(creditText)s
 %(artistKey)s
 %(separateArtists)s
+%(playable)s
+%(spacedPlayable)s
 var EPOCH = 365472000, SEED = 1981;
 function scheduleFor(manifest, num) {
   var vids = manifest.videos || manifest;
@@ -52,12 +54,6 @@ function scheduleFor(manifest, num) {
   }
   return separateArtists(items);
 }
-function playable(lib, bad) {
-  return lib.filter(function (it) { return !bad[it.id]; });
-}
-function spacedPlayable(lib, bad) {
-  return separateArtists(playable(lib, bad));
-}
 function onAir(lib, nowSec, bad) {
   var l = bad ? spacedPlayable(lib, bad) : lib;
   var total = l.reduce(function (s, it) { return s + it.duration; }, 0);
@@ -69,20 +65,20 @@ function onAir(lib, nowSec, bad) {
   }
   return { id: l[0].id, off: 0 };
 }
-function spacedPlayableOrder(lib, bad) {
-  var l = spacedPlayable(lib, bad);
-  return l.map(function (it) { return it.id; });
-}
 var input = JSON.parse(require("fs").readFileSync(0, "utf8"));
-var out = { order: {}, onair: {}, credits: {}, sp_order: null };
+var out = { order: {}, onair: {}, credits: {} };
 input.channels.forEach(function (num) {
   var lib = scheduleFor(input.manifest, num);
   out.order[num] = lib.map(function (it) { return it.id; });
   out.onair[num] = input.timestamps.map(function (t) { return onAir(lib, t); });
 });
 input.manifest.videos.forEach(function (it) { out.credits[it.id] = creditText(it); });
-if (input.sp_lib) {
-  out.sp_order = spacedPlayableOrder(input.sp_lib, input.sp_bad || null);
+/* closure-compatible lib/bad — production playable() and spacedPlayable() read these */
+var lib = input.sp_lib || null;
+var bad = input.sp_bad || {};
+if (lib) {
+  out.sp_ids = spacedPlayable().map(function (it) { return it.id; });
+  out.sp_keys = spacedPlayable().map(function (it) { return artistKey(it); });
 }
 process.stdout.write(JSON.stringify(out));
 """
@@ -98,6 +94,8 @@ class Parity(unittest.TestCase):
             "creditText": js_function("creditText"),
             "artistKey": js_function("artistKey"),
             "separateArtists": js_function("separateArtists"),
+            "playable": js_function("playable"),
+            "spacedPlayable": js_function("spacedPlayable"),
         }
         payload = json.dumps({
             "manifest": cls.manifest,
@@ -234,6 +232,8 @@ class FailedVideoFiltering(unittest.TestCase):
             "creditText": js_function("creditText"),
             "artistKey": js_function("artistKey"),
             "separateArtists": js_function("separateArtists"),
+            "playable": js_function("playable"),
+            "spacedPlayable": js_function("spacedPlayable"),
         }
         js_result = run_js(harness, json.dumps({
             "manifest": {"videos": [], "channels": {}},
@@ -242,12 +242,12 @@ class FailedVideoFiltering(unittest.TestCase):
             "sp_lib": lib,
             "sp_bad": bad,
         }))
-        js_order = js_result["sp_order"]
-        self.assertIsNotNone(js_order, "JS returned sp_order")
-        self.assertEqual(len(js_order), 5)
-        # JS key order: map each ID back to its artist key from lib
-        id_to_key = {it["id"]: schedule._artist_key(it) for it in lib}
-        js_keys = [id_to_key[jid] for jid in js_order]
+        # JS output: sp_ids = production spacedPlayable() IDs, sp_keys = artist keys
+        js_ids = js_result["sp_ids"]
+        self.assertIsNotNone(js_ids, "JS returned sp_ids")
+        self.assertEqual(len(js_ids), 5)
+        # Compare key order directly — harness already calls artistKey() per item
+        js_keys = js_result["sp_keys"]
         self.assertEqual(py_keys, js_keys,
                          f"JS/Python cyclic order must match: py={py_keys} js={js_keys}")
 
