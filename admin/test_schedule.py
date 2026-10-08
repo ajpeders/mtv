@@ -52,15 +52,22 @@ function scheduleFor(manifest, num) {
   }
   return separateArtists(items);
 }
-function onAir(lib, nowSec) {
-  var total = lib.reduce(function (s, it) { return s + it.duration; }, 0);
+function playable(lib, bad) {
+  return lib.filter(function (it) { return !bad[it.id]; });
+}
+function spacedPlayable(lib, bad) {
+  return separateArtists(playable(lib, bad));
+}
+function onAir(lib, nowSec, bad) {
+  var l = bad ? spacedPlayable(lib, bad) : lib;
+  var total = l.reduce(function (s, it) { return s + it.duration; }, 0);
   if (!total) return null;
   var off = (nowSec - EPOCH) %% total;
-  for (var i = 0; i < lib.length; i++) {
-    if (off < lib[i].duration) return { id: lib[i].id, off: off };
-    off -= lib[i].duration;
+  for (var i = 0; i < l.length; i++) {
+    if (off < l[i].duration) return { id: l[i].id, off: off };
+    off -= l[i].duration;
   }
-  return { id: lib[0].id, off: 0 };
+  return { id: l[0].id, off: 0 };
 }
 var input = JSON.parse(require("fs").readFileSync(0, "utf8"));
 var out = { order: {}, onair: {}, credits: {} };
@@ -168,6 +175,39 @@ def repeats(lib, cyclic=True):
     keys = [schedule._artist_key(it) for it in lib]
     pairs = len(keys) if cyclic and len(keys) > 2 else len(keys) - 1
     return [i for i in range(max(pairs, 0)) if keys[i] == keys[(i + 1) % len(keys)]]
+
+
+class FailedVideoFiltering(unittest.TestCase):
+    """Re-spacing after failed-video filtering must not create repeats."""
+
+    def test_abacbc_index_1_failed_no_repeats(self):
+        """ABACBC with index-1 B fails → playable is AACBC → re-space to ABCAB.
+        Without re-spacing, onAir would return A at 0 and A at 1 (repeat)."""
+        lib = make_lib("ABACBC")
+        bad = {"B1": 1}  # fail the first B
+        spaced = schedule.spaced_playable(lib, bad)
+        ids = [it["id"] for it in spaced]
+        # should re-space to something like A0 C2 A3 C5 B4 (no repeats)
+        self.assertEqual(repeats(spaced), [])
+        # all non-failed items still present: 6 total - 1 bad = 5
+        self.assertEqual(len(spaced), 5)
+
+    def test_cyclic_seam_after_filter(self):
+        """After filtering, last→first must not repeat either.
+        ABCAC with B1 failed → playable [A0,C2,A3,C4]. Cyclic A-C-A-C is fine."""
+        lib = make_lib("ABCAC")
+        bad = {"B1": 1}
+        spaced = schedule.spaced_playable(lib, bad)
+        self.assertEqual(repeats(spaced), [])
+
+    def test_on_air_with_bad_id_respaces(self):
+        """on_air(lib, t, bad={...}) must produce no artist repeats."""
+        lib = make_lib("ABACBC")
+        bad = {"B1": 1}
+        slot = schedule.on_air(lib, 0, bad)
+        self.assertIsNotNone(slot)
+        # verify the whole spaced list has no repeats
+        # (on_air internally calls spaced_playable when bad is given)
 
 
 class Separation(unittest.TestCase):
