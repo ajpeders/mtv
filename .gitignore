@@ -4,5 +4,8 @@ app/videos/*
 __pycache__/
 .venv/
 
+# standalone deploy state + mirrored videos (see docker-compose.standalone.yml)
+data/
+
 # kept locally / on the private Forgejo wiki, not published
 ROADMAP.md
