@@ -1,12 +1,11 @@
 # Architecture
 
-Three containers on the shared `web` network, all behind Traefik (the
-homelab, `docker-compose.yml`). `docker-compose.standalone.yml` runs the same
-three anywhere: nginx publishes a host port and proxies `/admin` to
-`mtv-admin` itself (`nginx.admin.conf`, pulled in by the `include` in
-`nginx.conf`, which matches nothing on the homelab), state and videos sit in
-`./data/`, mediaDb is off, and there is no viewers log. There is no
-database and no application state beyond two files: `channels.json` (the
+Three containers run by `docker-compose.standalone.yml`: nginx serves the
+player and proxies `/admin` to `mtv-admin` (`nginx.admin.conf`, pulled in by
+the `include` in `nginx.conf`), and `mtv-sync` mirrors playlists and builds
+the manifest. nginx publishes a host port and state and videos sit in
+`./data/`; mediaDb enrichment is off unless `MTV_MEDIADB_URL` is set. There is
+no database and no application state beyond two files: `channels.json` (the
 lineup) and `manifest.json` (what is on disk).
 
 ```
@@ -14,8 +13,6 @@ YouTube ──► mtv-sync ──► /videos (mp4 + manifest.json) ──► mtv
                  ▲  ▲                                           ▲
          mediaDb ┘  │ .sync-now                   channels.json │
                     └──────── mtv-admin ──────────────────────────┘
-                                  ▲
-              Traefik access log ─┘   (viewers panel, read-only)
 ```
 
 ## The schedule is math, not a server
@@ -27,13 +24,7 @@ air from the wall clock:
 1. Take the channel's videos from `manifest.json`.
 2. Sort by id, then shuffle with `mulberry32` seeded `1981 + channel number` —
    deterministic, so every device produces the identical running order.
-3. Space out artists: walk the shuffle and always take the earliest song by
-   someone other than the artist just played, unless one artist holds more than
-   half of what's left (then it must go now). If the loop seam (last → first)
-   repeats an artist, move the last song into a gap between two others. Artist
-   = the credits' artist, case-folded; unknown artists never count as repeats.
-   A library with no repeated artists keeps the plain shuffle order.
-4. `offset = (now - EPOCH) mod total_duration`, where `EPOCH` is 1981-08-01,
+3. `offset = (now - EPOCH) mod total_duration`, where `EPOCH` is 1981-08-01,
    MTV's sign-on. Walk the list to find the video and the seek position.
 
 Consequences worth knowing:
@@ -46,16 +37,16 @@ Consequences worth knowing:
   `admin/test_schedule.py` executes the real JavaScript functions under Node
   and compares ordering, wall-clock picks, and credits against Python fixtures.
 - `GET /admin/api/now?ch=N` exposes the current item, offset, and next item to
-  the admin panel and the living-room Pi without adding a broadcast process.
-  `&from=<id>` pins `now` to that video at offset 0: the Pi's Skip walks the
-  schedule order this way (the same "detour" as the player's `#remote` skip)
-  and rejoins the clock on a channel change.
+  the admin panel and to external clients without adding a broadcast process.
+  `&from=<id>` pins `now` to that video at offset 0: a remote control can walk
+  the schedule order this way (the same "detour" as the player's `#remote`
+  skip) and rejoin the clock on a channel change.
 
 ## Source modes
 
 `MTV_SOURCE` picks what `mtv-sync` does each pass:
 
-- `youtube` (default, the homelab): mirror each channel's playlist — below.
+- `youtube` (default): mirror each channel's playlist — below.
 - `files`: never mirror or prune. Download anything in
   `/config/playlists.txt` (optional; additive, see HOWTO), then
   `files_manifest.py` builds `manifest.json` from every `*.mp4` under
@@ -108,7 +99,7 @@ Before each manifest publish, `mtv-sync` reads enriched `music-video` items
 from mediaDb over the internal Docker network. Matching is by YouTube video id;
 artist, canonical track title, album, year, featured artists, genres (the
 top two are shown) and release type are copied into `manifest.json`. The
-player's credits and `/admin/api/now` (which the living-room Pi renders) share
+player's credits and `/admin/api/now` (which external clients render) share
 one parser, `creditText` in `app/mtv.js`, mirrored by `credit()` in
 `admin/schedule.py`: Artist / "Song" feat. X / Album (or Single/EP) · Year /
 genres.
@@ -118,7 +109,7 @@ never calls mediaDb directly, preserving public access to MTV while mediaDb
 remains LAN-only.
 
 Data also flows the other way. mediaDb can't fetch YouTube metadata itself
-(YouTube demands sign-in from the homelab), so the same manifest step writes an
+(YouTube demands sign-in), so the same manifest step writes an
 `<id>.info.json` sidecar next to each video with the playlist's title and
 channel, marked `"_source": "mtv-playlist"`. mediaDb reads sidecars before
 trying YouTube, then matches MusicBrainz for album and year, which come back
@@ -154,54 +145,37 @@ input the schedule needs.
 
 ### Codec
 
-Library files are stored as **HEVC in MP4** (`hvc1`). iOS Safari ≥11 plays
-HEVC MP4 natively, so the iOS-browser audience is unaffected. The reason
-for the round-trip: the living-room Pi (mpv on Pi5) has a hardware HEVC
-decoder (`rpi_hevc_dec` via V4L2 m2m) and **no H.264 hardware decoder**, so
-H.264 streams pin a CPU core at ~95% and visibly stutter. Storing HEVC gives
-the Pi zero-cost decode (~5% CPU) and a smaller file (CRF 23 ≈ 60% of the
-H.264 size for this source). The transcode is software `libx265` inside the
-`sync.sh` container — slow per file, but a one-time cost amortised across
-all future downloads. `sync.sh transcode-library` walks the existing library
-once and is idempotent: already-HEVC files are probed and skipped.
+Library files can be stored as **HEVC in MP4** (`hvc1`). iOS Safari ≥11 plays
+HEVC MP4 natively, so the iOS-browser audience is unaffected. The reason for
+the round-trip: some client hardware decodes HEVC but **not H.264** in
+hardware, so H.264 streams pin a CPU core and visibly stutter, while HEVC
+decodes for free and is smaller (CRF 23 ≈ 60% of the H.264 size for this
+source). The transcode is software `libx265` inside the `sync.sh` container —
+slow per file, but a one-time cost amortised across all future downloads. It
+is off by default in the standalone deploy (`MTV_HEVC_TRANSCODE=1` turns it
+on). `sync.sh transcode-library` walks an existing library once and is
+idempotent: already-HEVC files are probed and skipped.
 
 ## Routing
 
-Homelab (Traefik). The standalone deploy has none of this: `/admin` is open to
-whoever reaches the published port. Both routers match `Host(MTV_DOMAIN)`; `/admin` also matches `PathPrefix`, and
-Traefik prefers it because its rule is longer (default priority = rule length).
+The standalone deploy has no external proxy: nginx publishes a host port and
+`nginx.admin.conf` proxies `/admin` to `mtv-admin` on the shared container
+network. To front the app with your own reverse proxy instead, drop the
+`include` in `nginx.conf`.
 
-- The **player route is deliberately public** — no `local-only`. Friends watch
-  it. iCloud Private Relay viewers therefore appear as Fastly/Cloudflare IPs.
-- The **admin route carries `local-only@file`**, which is the only access
-  control that exists. `mtv-admin` has no auth of its own. Never expose that
-  router without the middleware.
+- The **player** is served to anyone who reaches the port.
+- The **admin** route has no auth of its own. Keep the port on your LAN or put
+  your own authenticating proxy in front. Never expose `/admin` publicly.
 
 ## Configuration lives in state, not the repo
 
-`channels.json` is served from `state/mtv` (nginx aliases `/channels.json` to
-the mount), seeded once from `app/channels.default.json`. The admin page edits
-the state copy. This is what keeps runtime lineup edits from dirtying the
-deploy checkout — a dirty tree makes `bin/deploy` skip the app.
+`channels.json` is served from the mounted config dir (nginx aliases
+`/channels.json` to the mount), seeded once from `app/channels.default.json`.
+The admin page edits the state copy, so runtime lineup edits never touch the
+repo checkout.
 
 Writes are atomic (tmp file + `os.replace`) and chmod 0644, because the
 separate nginx container must read the file after replacement.
-
-## Viewers panel
-
-`/admin/api/viewers` parses Traefik's JSON access log, mounted read-only at
-`/traefik-logs`. That log is the only place real client IPs exist: nginx in the
-player sees only Traefik's address. Private sources are labelled by range
-(LAN / WireGuard / Tailscale / host); public IPs are geolocated via ip-api.com
-and cached in `/config/geoip.json`, shared with the `bin/mtv-viewers` CLI.
-
-Two limits are inherent: the log rotates daily, so the panel covers roughly one
-day; and it counts **page loads**, not concurrent watchers — a tab open for
-three hours is one row.
-
-AdGuard's blocklists resolve most geolocation APIs to `0.0.0.0`; ip-api.com
-needs an explicit allow rule (`@@||ip-api.com^`) or every public IP reports
-"geo lookup failed".
 
 ## Caching
 

@@ -1,29 +1,19 @@
 # mtv-admin — integrator notes
 
 Lineup editor + sync trigger + now-playing preview for MTV. All routes live
-under `/admin` (no stripprefix) so it slots straight onto the existing
-`mtv.thelunadog.com` router with a path rule.
+under `/admin` (no stripprefix) so it slots straight onto the existing player
+nginx proxy (`nginx.admin.conf`).
 
 ## Expected compose service block
 
 ```yaml
   mtv-admin:
     build: ./admin
-    container_name: mtv-admin
     restart: unless-stopped
+    user: ${MTV_UID:-1000}:${MTV_GID:-1000}      # so /config stays yours
     volumes:
-      - ../../state/mtv/config:/config          # channels.json + .sync-now (rw)
-      - ../../state/mtv/videos:/videos:ro       # manifest.json + mp4s (ro)
-    networks:
-      - web
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.mtv-admin.rule=Host(`mtv.thelunadog.com`) && PathPrefix(`/admin`)
-      - traefik.http.routers.mtv-admin.entrypoints=websecure
-      - traefik.http.routers.mtv-admin.tls.certresolver=letsencrypt
-      - traefik.http.routers.mtv-admin.middlewares=local-only@file
-      - traefik.http.routers.mtv-admin.priority=10   # must beat the player's catch-all route
-      - traefik.http.services.mtv-admin.loadbalancer.server.port=8000
+      - ${MTV_CONFIG_PATH:-./data/config}:/config   # channels.json + .sync-now (rw)
+      - ${MTV_VIDEOS_PATH:-./data/videos}:/videos:ro # manifest.json + mp4s (ro)
 ```
 
 Adjust the two volume host paths to wherever the sync container's config and
@@ -32,9 +22,8 @@ hardcoded in `main.py`.
 
 ## Must-knows
 
-- **No auth in the app.** `local-only@file` on the Traefik router is the only
-  gate — do not expose this router without it. The main MTV route is public;
-  the `/admin` PathPrefix route must carry the middleware and higher priority.
+- **No auth in the app.** Keep the published port on your LAN or put your own
+  authenticating proxy in front — do not expose `/admin` to the internet.
 - **`/config` must be writable by uid 1000** (the container's `mtv` user):
   lineup saves write a tmp file + `os.replace`, and SYNC NOW touches
   `/config/.sync-now`.

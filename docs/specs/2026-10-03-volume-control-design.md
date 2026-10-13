@@ -16,7 +16,7 @@ look and a plain ("regular") picture.
 - No change to the mute semantics ("MUTED / TAP FOR SOUND" on first load).
 - Regular mode keeps the green VT323 OSD, the static burst on channel change
   and the volume bar. It is a clean picture, not a different player.
-- No admin, sync, or Pi (outpost) changes. TV-set volume via CEC is a
+- No admin, sync, or external-client changes. TV-set volume via CEC is a
   separate project.
 
 ## Design
@@ -196,6 +196,4 @@ Volume bar and CRT toggle, desktop Chrome:
 
 ## Docs
 
-- ROADMAP.md: status bullet under "Status" for volume control, the bar and
-  the CRT/regular toggle.
 - README.md: no change (it documents URLs, not keys).

@@ -3,3 +3,6 @@ app/videos/*
 !app/videos/.gitkeep
 __pycache__/
 .venv/
+
+# kept locally / on the private Forgejo wiki, not published
+ROADMAP.md
