@@ -48,22 +48,30 @@ Story points for future items (1/2/3/5/8): 1–2 = mechanical, safe
 unattended; 3 = needs codebase context; 5–8 = design judgment or
 cross-service work.
 
-- **(3) `.sync-now` is ignored during long passes.** The trigger is only read
-  in the sleep between passes, and the one-time HEVC transcode makes a pass
-  take hours, so "Sync now" in the admin page does nothing until it finishes
-  (seen 2026-09-21: had to run the manifest step by hand to publish new
-  mediaDb metadata). Check the trigger between transcodes and, when set,
-  republish the manifest (cheap) before carrying on, or run manifest refresh
-  on its own short timer independent of downloads. Playlist changes no longer
-  need the trigger (2026-10-03 watcher); `channels.json` edits and new
-  mediaDb metadata still wait for the pass.
+- [ ] **MTV-01 — .sync-now is ignored during long passes** (ready, 3 pts)
+  - **Why:** The trigger is only read in the sleep between passes, and the one-time HEVC transcode makes a pass take hours, so "Sync now" in the admin page does nothing until it finishes.
+  - **Start here:** sync pass loop, manifest refresh
+  - **Do:** Check the trigger between transcodes and, when set, republish the manifest (cheap) before carrying on, or run manifest refresh on its own short timer independent of downloads.
+  - **Done when:** .sync-now trigger is respected during long passes; `channels.json` edits and new mediaDb metadata no longer wait for the next full pass.
 
-- **(1) Verify standalone files mode in a real browser.** The 2026-09-30
-  check was curl-only (player, manifest, `/admin/api/now`, video URLs incl.
-  `%2F` subfolder ids). Play a subfolder channel with `&`/`#` in a filename.
-- **(1) Verify `fetch` with a bare playlist id.** Only a single-video URL
-  was tested; the playlist URL format is the one the mirror already uses.
-- **(1) favicon.** `/favicon.ico` 404s on every page load (console noise).
+- [ ] **MTV-02 — Verify standalone files mode in a real browser** (ready, 1 pts)
+  - **Why:** The 2026-09-30 standalone files mode check was curl-only — no browser verification yet.
+  - **Start here:** standalone files mode
+  - **Do:** Play a subfolder channel with `&`/`#` in a filename in a real browser.
+  - **Done when:** standalone files mode verified in a real browser with subfolder channels containing `&`/`#` in filenames.
+
+- [ ] **MTV-03 — Verify fetch with a bare playlist id** (ready, 1 pts)
+  - **Why:** Only a single-video URL was tested for `fetch` — the playlist URL format hasn't been verified.
+  - **Start here:** `fetch` code, playlist URL format
+  - **Do:** Verify `fetch` with a bare playlist id.
+  - **Done when:** `fetch` verified with a bare playlist id.
+
+- [ ] **MTV-04 — favicon** (ready, 1 pts)
+  - **Why:** `/favicon.ico` 404s on every page load (console noise).
+  - **Start here:** static assets
+  - **Do:** Add a favicon.
+  - **Done when:** `/favicon.ico` no longer 404s.
+
 
 ## Considered and deliberately not done
 
