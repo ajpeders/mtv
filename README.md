@@ -17,18 +17,25 @@ the TV shows a new or removed channel after a page reload.
 
 ## Run it yourself
 
-Any Docker host, one command. `docker-compose.standalone.yml`
-publishes the player **and** `/admin` on one port (default 8080) and keeps
-state in `./data/config` and videos in `./data/videos`.
+Any Docker host, one command. `docker-compose.standalone.yml` publishes the
+player **and** `/admin` on one port (default 8080) and keeps state in
+`./data/config` and videos in `./data/videos`.
 
 > **`/admin` has no auth.** Anyone who can reach the port can edit the lineup.
 > Keep it on your LAN (`MTV_PORT=192.168.1.10:8080` binds one address) or put
 > your own authenticating proxy in front.
 
+Create the state and video directories as yourself first. The containers run as
+uid 1000, so if Docker creates these dirs for you they end up root-owned and the
+sync and `/admin` fail to write:
+
+```sh
+mkdir -p data/config data/videos
+```
+
 **Files mode** — air a folder of mp4s, no YouTube involved:
 
 ```sh
-mkdir -p data/config data/videos          # create them as yourself (uid 1000 by default)
 cp ~/Music\ Videos/*.mp4 data/videos/     # "Artist - Song.mp4" names give credits
 echo MTV_SOURCE=files > .env
 docker compose -f docker-compose.standalone.yml up -d --build
@@ -37,9 +44,14 @@ docker compose -f docker-compose.standalone.yml up -d --build
 Every file airs on channel 1; each subfolder of `data/videos` is also its own
 channel. Open `http://<host>:8080/`.
 
-**YouTube mode** (default) — mirror playlists: leave `MTV_SOURCE` unset, start
-the same way, then set each channel's playlist id at
-`http://<host>:8080/admin` and press `SYNC NOW`.
+**YouTube mode** (default) — mirror playlists:
+
+```sh
+docker compose -f docker-compose.standalone.yml up -d --build
+```
+
+Then set each channel's playlist id at `http://<host>:8080/admin` and press
+`SYNC NOW`.
 
 To download YouTube playlists into files mode instead:
 
