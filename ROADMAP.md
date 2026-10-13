@@ -64,6 +64,9 @@ cross-service work.
 - **(1) Verify `fetch` with a bare playlist id.** Only a single-video URL
   was tested; the playlist URL format is the one the mirror already uses.
 - **(1) favicon.** `/favicon.ico` 404s on every page load (console noise).
+- **(1) CI on the GitHub mirror.** The only CI is `.forgejo/workflows/ci.yml`,
+  which GitHub ignores, so a public pull request shows no checks. Add a
+  `.github/workflows/ci.yml` running the same sanity checks.
 
 ## Considered and deliberately not done
 
