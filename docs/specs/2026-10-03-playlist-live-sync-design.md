@@ -1,7 +1,6 @@
 # Live sync of mediaDb playlists into MTV channels
 
-Date: 2026-10-03. Repo: `mtv`, files `sync.sh`, `app/mtv.js`,
-`docker-compose.yml`.
+Date: 2026-10-03. Repo: `mtv`, files `sync.sh`, `app/mtv.js`.
 
 ## Goal
 
@@ -63,13 +62,12 @@ playing finishes first.
 
 ### Documentation
 
-README, ARCHITECTURE (sync pass and playlist channels), HOWTO (the new
-variable) and ROADMAP (status, backlog note on the trigger) say that playlist
-changes arrive within a minute.
+README, ARCHITECTURE (sync pass and playlist channels) and HOWTO (the new
+variable) say that playlist changes arrive within a minute.
 
 ## Verification
 
-On the host after deploy:
+After deploy:
 
 1. `docker logs -f mtv-sync` shows the watcher start line.
 2. Create a manual playlist in mediaDb with a few downloaded videos. Within a

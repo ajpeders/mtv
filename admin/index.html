@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MTV ADMIN — example</title>
+<title>MTV ADMIN</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <style>
@@ -71,14 +71,6 @@
   <h2>NOW PLAYING</h2>
   <div id="onair">LOADING…</div>
   <div class="row"><a href="/#remote">OPEN REMOTE →</a></div>
-</section>
-<section>
-  <h2>VIEWERS <small>— PAGE LOADS SINCE LAST LOG ROTATION (DAILY)</small></h2>
-  <div class="table-wrap"><table>
-    <thead><tr><th>WHERE</th><th>IP</th><th>STATUS</th><th class="r">HITS</th><th>FIRST</th><th>LAST</th></tr></thead>
-    <tbody id="viewer-rows"></tbody>
-  </table></div>
-  <div class="stat" id="viewers-msg"></div>
 </section>
     <!-- static row template; all dynamic values go in via .value/.textContent -->
     <template id="row-tpl">
@@ -361,65 +353,20 @@
             });
         }
 
-        // ---- viewers panel ----
-        function refreshViewers() {
-          fetch("/admin/api/viewers")
-            .then(function (r) {
-              return r.json().then(function (b) {
-                return { ok: r.ok, b: b };
-              });
-            })
-            .then(function (res) {
-              var body = $("viewer-rows");
-              var note = $("viewers-msg");
-              if (!res.ok) {
-                note.textContent = res.b.detail || "VIEWERS UNAVAILABLE";
-                return;
-              }
-              var vs = res.b.viewers || [];
-              body.textContent = "";
-              note.textContent = vs.length ? "" : "NO PAGE LOADS YET TODAY";
-              vs.forEach(function (v) {
-                var tr = document.createElement("tr");
-                [
-                  v.where,
-                  v.ip,
-                  v.watched ? "WATCHED" : "BLOCKED (" + v.status + ")",
-                  String(v.hits),
-                  (v.first || "").replace("T", " "),
-                  (v.last || "").replace("T", " "),
-                ].forEach(function (text, i) {
-                  var td = document.createElement("td");
-                  if (i === 3) td.className = "r";
-                  td.textContent = text;
-                  tr.appendChild(td);
-                });
-                if (!v.watched) tr.className = "off";
-                body.appendChild(tr);
-              });
-            })
-            .catch(function () {
-              $("viewers-msg").textContent = "COULD NOT LOAD VIEWERS";
-            });
-        }
-
         loadLineup();
         refreshStatus();
         refreshOnAir();
-        refreshViewers();
         // poll only while someone is looking: a forgotten background tab would
-        // otherwise hit /now for every channel and re-parse the access log forever
+        // otherwise keep hitting /now for every channel
         function whenVisible(fn) {
           return function () { if (!document.hidden) fn(); };
         }
         setInterval(whenVisible(refreshStatus), 30000);
         setInterval(whenVisible(refreshOnAir), 10000);
-        setInterval(whenVisible(refreshViewers), 60000);
         document.addEventListener("visibilitychange", function () {
           if (document.hidden) return;
           refreshStatus();
           refreshOnAir();
-          refreshViewers();
         });
       })();
     </script>

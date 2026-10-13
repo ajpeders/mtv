@@ -1,9 +1,9 @@
 # MTV
 
-A CRT-styled music-video channel at `mtv.example.com`. It behaves like
-broadcast TV, not a video site: every viewer sees the same video at the same
-moment, there is no "play" button, and nothing is stored per-viewer. You tune
-in and join whatever is already playing.
+A CRT-styled music-video channel. It behaves like broadcast TV, not a video
+site: every viewer sees the same video at the same moment, there is no "play"
+button, and nothing is stored per-viewer. You tune in and join whatever is
+already playing.
 
 Videos are mirrored locally from YouTube playlists, so playback does not depend
 on YouTube at watch time.
@@ -17,7 +17,7 @@ the TV shows a new or removed channel after a page reload.
 
 ## Run it yourself
 
-Any Docker host, one command, no the reverse proxy. `docker-compose.standalone.yml`
+Any Docker host, one command. `docker-compose.standalone.yml`
 publishes the player **and** `/admin` on one port (default 8080) and keeps
 state in `./data/config` and videos in `./data/videos`.
 
@@ -37,8 +37,8 @@ docker compose -f docker-compose.standalone.yml up -d --build
 Every file airs on channel 1; each subfolder of `data/videos` is also its own
 channel. Open `http://<host>:8080/`.
 
-**YouTube mode** (default) — mirror playlists like the your host does: leave
-`MTV_SOURCE` unset, start the same way, then set each channel's playlist id at
+**YouTube mode** (default) — mirror playlists: leave `MTV_SOURCE` unset, start
+the same way, then set each channel's playlist id at
 `http://<host>:8080/admin` and press `SYNC NOW`.
 
 To download YouTube playlists into files mode instead:
@@ -50,41 +50,24 @@ docker compose -f docker-compose.standalone.yml run --rm mtv-sync fetch PLxxxxxx
 See [HOWTO.md](HOWTO.md) for folders-as-channels, `playlists.txt` and the other
 settings (`.env.example`). If your user isn't uid 1000, set `MTV_UID`/`MTV_GID`.
 
-## Your host deploy
-
-```sh
-cp .env.example .env          # set MTV_DOMAIN, optionally MTV_VIDEOS_PATH
-docker compose up -d --build  # from the your host services/ dir in production
-```
-
-On the your host this app is included by `services/docker-compose.yml` and
-deployed by `deploy` (conf: `deploy.d/mtv.conf`), so a push to `main`
-that passes CI deploys itself.
-
-| URL | What |
-|---|---|
-| `https://mtv.example.com/` | the player — **public** |
-| `https://mtv.example.com/#remote` | player with the skip button enabled |
-| `https://mtv.example.com/admin` | lineup editor, sync, viewers — **LAN/VPN only** |
-| `GET /admin/api/now?ch=N` | current and next item for channel N — **LAN/VPN only** |
-| `GET /admin/api/now?ch=N&from=ID` | video `ID` from the top plus its successor, ignoring the clock (the Pi's skip detour) — **LAN/VPN only** |
-
 ## Containers
 
 | Name | Image | Role |
 |---|---|---|
 | `mtv` | nginx | serves the player and the mirrored mp4s |
 | `mtv-sync` | yt-dlp | mirrors each channel's playlist (or scans the files), enriches and builds `manifest.json` |
-| `mtv-admin` | FastAPI (built here) | `/admin` — lineup, sync trigger, now-playing, viewers |
+| `mtv-admin` | FastAPI (built here) | `/admin` — lineup, sync trigger, now-playing |
 
 ## Key commands
 
 ```sh
-docker compose logs -f mtv-sync            # watch a mirror pass
-docker exec mtv-sync touch /config/.sync-now   # force a sync within ~15s
-mtv-viewers                            # who watched, from where (host CLI)
-mtv-viewers -f                         # live joins
+docker compose -f docker-compose.standalone.yml logs -f mtv-sync   # watch a mirror pass
+docker exec mtv-sync touch /config/.sync-now                       # force a sync within ~15s
 ```
 
-See [HOWTO.md](HOWTO.md) for common tasks, [ARCHITECTURE.md](ARCHITECTURE.md)
-for how the schedule and sync work, and [ROADMAP.md](ROADMAP.md) for status.
+See [HOWTO.md](HOWTO.md) for common tasks and
+[ARCHITECTURE.md](ARCHITECTURE.md) for how the schedule and sync work.
+
+## License
+
+[MIT](LICENSE)

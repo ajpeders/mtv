@@ -1,4 +1,4 @@
-# Run MTV on any Docker host — no the reverse proxy, no your host paths:
+# Run MTV on any Docker host — no external proxy, no hard-coded paths:
 #
 #   mkdir -p data/config data/videos
 #   docker compose -f docker-compose.standalone.yml up -d --build
@@ -6,7 +6,7 @@
 # Player on http://<host>:${MTV_PORT}/, admin on /admin through the same port.
 # /admin has NO AUTH: publish on your LAN only (MTV_PORT=192.168.1.10:8080
 # binds one address) or put your own authenticating proxy in front.
-# Settings: .env (see .env.example). docker-compose.yml is the your host deploy.
+# Settings: .env (see .env.example).
 services:
   mtv:
     security_opt:
@@ -36,8 +36,8 @@ services:
       MTV_SOURCE: ${MTV_SOURCE:-youtube}
       SYNC_INTERVAL: ${MTV_SYNC_INTERVAL:-6h}
       MEDIADB_URL: ${MTV_MEDIADB_URL:-}
-      # the your host keeps HEVC for its Pi; browsers other than Safari/Chrome
-      # can't all play it, so H.264 stays by default here
+      # HEVC is smaller and some clients decode it in hardware, but browsers
+      # other than Safari/Chrome can't all play it, so H.264 stays by default
       HEVC_TRANSCODE: ${MTV_HEVC_TRANSCODE:-0}
       HOME: /tmp
     volumes:

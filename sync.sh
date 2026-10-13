@@ -2,9 +2,9 @@
 # Mirror every channel's YouTube playlist into /videos and keep it in sync.
 # Runs forever inside the mtv-sync container; one pass every SYNC_INTERVAL,
 # or sooner when the admin page touches /config/.sync-now.
-# The channel lineup lives in /config/channels.json (state, admin-editable
-# at runtime — NOT in the repo, so admin edits can't dirty the deploy
-# checkout); it is seeded from app/channels.default.json on first start.
+# The channel lineup lives in /config/channels.json (admin-editable at
+# runtime — NOT in the repo); it is seeded from app/channels.default.json on
+# first start.
 # Channels with an empty "playlist" are skipped, so the lineup can ship ahead
 # of the playlists existing.
 #
@@ -55,9 +55,8 @@ UNION=/tmp/union.tsv
 TAB=$(printf '\t')
 
 # Disable the HEVC transcode step by setting HEVC_TRANSCODE=0. Default: on.
-# The the client client (mpv) has a hardware HEVC decoder but no H.264 one, so the
-# the TV stutters on H.264 software decode. Keeping library files as
-# HEVC gives the Pi zero-cost decode and a smaller download.
+# Some clients decode HEVC in hardware but not H.264, so storing library files
+# as HEVC gives them zero-cost decode and a smaller file.
 HEVC_TRANSCODE="${HEVC_TRANSCODE:-1}"
 # libx265 preset / quality. CRF 23 is "visually lossless" for this source
 # (1080p music video) and ~60% of the original H.264 size. -tag:v hvc1 is
@@ -162,7 +161,7 @@ files_manifest() {
 # --- one-shot: transcode-library -----------------------------------------
 # Walks every local mp4 and transcodes any that are still H.264 (idempotent:
 # already-HEVC files are skipped via ffprobe). Useful after switching the
-# library to HEVC for the the client client. Prints progress, exits non-zero if any
+# library to HEVC. Prints progress, exits non-zero if any
 # file failed (so callers can tell partial success apart from full).
 if [ "${1:-}" = "transcode-library" ]; then
     n=0; failed=0
@@ -276,8 +275,8 @@ if base_url:
         print(f"[sync] mediadb unavailable, using playlist titles: {error}", file=sys.stderr)
 
 def write_sidecar(vid, title, channel):
-    # mediaDb reads <id>.info.json before asking YouTube, which now demands
-    # sign-in from the your host. The playlist listing already has the title
+    # mediaDb reads <id>.info.json before asking YouTube, which demands
+    # sign-in. The playlist listing already has the title
     # ("Artist - Song") and channel, so hand them over. Never overwrite a
     # sidecar we didn't write (a full yt-dlp --write-info-json is richer).
     if not title or title == "NA":
