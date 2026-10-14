@@ -53,6 +53,9 @@ docker compose -f docker-compose.standalone.yml up -d --build
 Then set each channel's playlist id at `http://<host>:8080/admin` and press
 `SYNC NOW`.
 
+> A fresh install has an empty lineup, so the TV shows **NO SIGNAL** until you
+> add at least one playlist id.
+
 To download YouTube playlists into files mode instead:
 
 ```sh
