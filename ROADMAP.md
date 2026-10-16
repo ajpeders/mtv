@@ -60,18 +60,6 @@ cross-service work.
   - **Do:** Verify `fetch` with a bare playlist id.
   - **Done when:** `fetch` verified with a bare playlist id.
 
-- [ ] **MTV-04 — favicon** (ready, 1 pts)
-  - **Why:** `/favicon.ico` 404s on every page load (console noise).
-  - **Start here:** static assets
-  - **Do:** Add a favicon.
-  - **Done when:** `/favicon.ico` no longer 404s.
-
-- [ ] **MTV-05 — CI on the GitHub mirror** (ready, 1 pt)
-  - **Why:** GitHub ignores `.forgejo/workflows/ci.yml`, so public pull requests show no checks.
-  - **Start here:** `.forgejo/workflows/ci.yml`
-  - **Do:** Add a `.github/workflows/ci.yml` running the same sanity checks.
-  - **Done when:** GitHub pull requests run the same checks as Forgejo.
-
 - [ ] **MTV-06 — Now-playing metadata on the audio output** (ready, 2 pts)
   - **Why:** OS media controls, lock screens, Bluetooth speakers and car displays show nothing (or the page title) while MTV plays, so you can't see what's on without looking at the screen.
   - **Start here:** `app/mtv.js`, where the lower third is set on each track change
@@ -113,6 +101,9 @@ cross-service work.
 
 ## History
 
+- 2026-10-16 — MTV-04/05: pixel-M `favicon.svg` linked from the player and
+  admin (no more `/favicon.ico` 404s); `.github/workflows/ci.yml` mirrors the
+  Forgejo checks so GitHub pull requests show CI too.
 - 2026-10-16 — MTV-01: "Sync now" during a long pass (HEVC transcodes)
   republishes the manifest between transcodes instead of waiting for the pass
   to end; the trigger still starts a fresh pass afterwards.

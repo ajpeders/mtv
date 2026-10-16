@@ -1,0 +1,37 @@
+# Mirror of .forgejo/workflows/ci.yml for pull requests on the GitHub
+# mirror (GitHub ignores .forgejo/). Keep the two in step.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare Python test environment
+        run: |
+          python3 -m venv /tmp/mtv-venv
+          /tmp/mtv-venv/bin/pip install --quiet fastapi==0.115.12 httpx
+      - name: Sanity-check player, sync script and admin app
+        run: |
+          test -f app/index.html
+          test -f app/channels.default.json
+          test -f nginx.conf
+          node --check app/mtv.js
+          sh -n sync.sh
+          python3 -c "
+          import json
+          chans = json.load(open('app/channels.default.json'))
+          nums = [c['num'] for c in chans]
+          assert nums and len(nums) == len(set(nums)), 'duplicate channel nums'
+          assert all(c['name'] for c in chans), 'empty channel name'
+          "
+          # player must fetch the lineup from the state-backed route, not a
+          # checked-in file
+          grep -q 'channels.json' app/mtv.js
+          test -f admin/Dockerfile
+          python3 -m compileall -q admin files_manifest.py
+          (cd admin && /tmp/mtv-venv/bin/python test_schedule.py && /tmp/mtv-venv/bin/python test_now.py \
+            && /tmp/mtv-venv/bin/python test_files_manifest.py)
