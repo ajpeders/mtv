@@ -41,8 +41,8 @@ are all live and stable.
   `docker-compose.standalone.yml` runs anywhere on one port; `MTV_SOURCE=files`
   airs a folder of mp4s with subfolders as channels; `sync.sh fetch` downloads
   YouTube playlists into it. Homelab compose unchanged.
-- Remote redesign (2026-10-16): the control strip is pixel-style icons flush
-  to the top-right corner, with a mute pad and a `BG` (play in background)
+- Remote redesign (2026-10-16): the remote is a column of pixel-style icons
+  flush to the top-right corner, with a mute pad and a `BG` (play in background)
   toggle, off by default and remembered per device. Tapping the channel
   number opens a channel list. Lock screens and browser media controls show
   `[mtv] Artist – Song` (Media Session), with play/pause and, on `/#remote`,

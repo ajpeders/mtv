@@ -117,7 +117,7 @@ means the channel is unknown, empty, or not synced yet.
 
 ## Use the TV controls
 
-Tap (or click) the picture to bring up the remote: a strip of icons flush to
+Tap (or click) the picture to bring up the remote: a column of icons flush to
 the top-right corner that hides again after four seconds.
 
 | Icon | Does | Key |

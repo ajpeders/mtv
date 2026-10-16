@@ -220,7 +220,7 @@
   }
   #osd-mute {
     position: static;
-    margin-right: 5vw;
+    margin-top: 5vh; /* level with the channel number */
     max-width: 25vw;
     text-align: right;
     font-size: clamp(15px, 2vmin, 24px);
@@ -272,17 +272,21 @@
     cursor: default;
   }
   #catcher:focus-visible { outline: 1px solid var(--phosphor-dim); outline-offset: -8px; }
-  /* top-right column: the remote flush to the top edge, mute notice below */
+  /* top-right corner: the remote as a column flush to the top and right
+     edges, the mute notice beside it */
   #top-right {
     position: fixed;
     top: env(safe-area-inset-top, 0px);
     right: env(safe-area-inset-right, 0px);
-    display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+    display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 10px;
     max-width: 100vw;
     pointer-events: none;
   }
   #pads {
-    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px;
+    /* too tall for the screen (landscape phone): a second column opens to the
+       left, and it stays clear of the volume bar in the bottom-right corner */
+    display: flex; flex-direction: column; flex-wrap: wrap-reverse; gap: 2px;
+    max-height: calc(100vh - env(safe-area-inset-top, 0px) - 8vh - 90px);
     padding: 3px;
     background: #000b;
     border: solid var(--phosphor-dim);
@@ -318,10 +322,6 @@
     #osd-track::before { height: 3px; margin-bottom: 9px; }
     #osd-mute { font-size: 15px; }
     #pads button { padding: 6px; }
-    /* side by side with the channel number: the remote wraps into a
-       five-wide block, the channel name onto a second line */
-    #pads { max-width: 62vw; }
-    #osd-ch { max-width: 30vw; }
   }
   @media (prefers-reduced-motion: reduce) {
     #hum { animation: none; }
