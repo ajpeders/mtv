@@ -523,6 +523,11 @@
       active.classList.add("on");
       old.classList.remove("on");
       old.pause();
+      // old is the standby now. The first screen carries `autoplay` (for iOS)
+      // and old is the one the viewer unmuted: left as is, the next preload
+      // would start playing out loud, hidden, over the video on air
+      old.removeAttribute("autoplay");
+      old.muted = true;
       currentId = prep;
       prep = null;
       var nowPlaying = null;
