@@ -115,6 +115,34 @@ It reports the current item and offset, the next item, mediaDb-enriched credits
 (including album and year when available), and the public video URL base. A 404
 means the channel is unknown, empty, or not synced yet.
 
+## Use the TV controls
+
+Tap (or click) the picture to bring up the remote: a strip of icons flush to
+the top-right corner that hides again after four seconds.
+
+| Icon | Does | Key |
+|---|---|---|
+| ▲ ▼ | channel up / down (multi-channel only) | `↑` `↓` |
+| ⏭ | skip (only on `/#remote`) | `→` |
+| speaker | mute / unmute | `M` |
+| speaker − / + | volume in 10% steps (not on iOS) | `-` `+` |
+| corners | fullscreen | `F` |
+| TV | CRT picture on / off | `C` |
+| headphones | play in background, lit when on | `B` |
+| PiP / AirPlay | shown only where the browser supports them | |
+
+While the remote is up, tap the channel number (top left, `CH 01 ▾`) for the
+channel list; arrow keys walk it, Enter tunes, Esc closes. Volume, CRT and
+background play are remembered per device.
+
+Background play is off by default: hiding the tab pauses and coming back
+rejoins live. With it on the video keeps going in a hidden tab (desktop,
+Android). iPhone Safari still pauses page video when locked or switched away;
+use PiP or AirPlay there.
+
+Lock screens and media controls show `[mtv] Artist – Song`. Play/pause there
+work too (play rejoins live), and next track skips on `/#remote`.
+
 ## Change the player's look
 
 Everything visual is in `app/index.html` (markup and the inline CRT styles)

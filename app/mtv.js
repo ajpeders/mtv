@@ -21,12 +21,18 @@
   volume = Math.max(0, Math.min(100, Math.round(volume / 10) * 10));
   var crt = true;
   try { crt = localStorage.getItem("mtv-crt") !== "0"; } catch (e) {}
+  // background play is opt-in per device: off, a hidden tab pauses (below)
+  var bg = false;
+  try { bg = localStorage.getItem("mtv-bg") === "1"; } catch (e) {}
   // iOS gives pages no say over media volume (hardware buttons only)
   var IOS = /iP(hone|ad|od)/.test(navigator.platform) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   var osdTimer = null;
   var volTimer = null;
   var padsTimer = null;
+  var padsOn = false;
   var credits = null;
+  // lock screens, OS and browser media controls, Bluetooth and car displays
+  var MS = "mediaSession" in navigator ? navigator.mediaSession : null;
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -119,6 +125,15 @@
     $("osd-track").classList.add("show");
   }
 
+  function setNowPlaying() {
+    if (!MS || typeof MediaMetadata === "undefined" || !credits || !credits.song) return;
+    MS.metadata = new MediaMetadata({
+      title: "[mtv] " + (credits.artist ? credits.artist + " – " : "") + credits.song,
+      artist: credits.artist,
+      album: credits.album,
+    });
+  }
+
   function clearCredits() {
     credits = null;
     $("osd-track").classList.remove("show");
@@ -130,12 +145,14 @@
     $("osd-ch").classList.add("show");
     if (title) {
       credits = creditText(title);
+      setNowPlaying();
     }
     showCredits();
     $("osd-mute").classList.toggle("show", muted);
     clearTimeout(osdTimer);
     osdTimer = setTimeout(function () {
-      $("osd-ch").classList.remove("show");
+      // the channel number stays up (and tappable) while the remote is
+      if (!padsOn) $("osd-ch").classList.remove("show");
     }, 3500);
   }
 
@@ -145,16 +162,63 @@
     setTimeout(function () { el.classList.remove("on"); }, ms || 350);
   }
 
+  function setPads(on) {
+    padsOn = on;
+    $("pads").classList.toggle("show", on);
+    $("pads").inert = !on;
+    $("pads").setAttribute("aria-hidden", on ? "false" : "true");
+    var tap = on && LINEUP.length > 1;
+    $("osd-ch").classList.toggle("tap", tap);
+    $("osd-ch").inert = !tap;
+    if (on) {
+      $("osd-ch").textContent = chLabel();
+      $("osd-ch").classList.add("show");
+    } else {
+      $("osd-ch").classList.remove("show");
+    }
+  }
   function showPads() {
-    $("pads").classList.add("show");
-    $("pads").inert = false;
-    $("pads").setAttribute("aria-hidden", "false");
+    setPads(true);
     clearTimeout(padsTimer);
-    padsTimer = setTimeout(function () {
-      $("pads").classList.remove("show");
-      $("pads").inert = true;
-      $("pads").setAttribute("aria-hidden", "true");
-    }, 4000);
+    // an open channel list holds the remote up until it closes
+    padsTimer = setTimeout(function () { if (!listOpen()) setPads(false); }, 4000);
+  }
+
+  // ---- channel list: tap the channel number while the remote is up ----
+  function listOpen() { return !$("ch-list").hidden; }
+  function openList() {
+    if (!deck || !deck.go || LINEUP.length < 2) return;
+    var list = $("ch-list");
+    list.textContent = "";
+    LINEUP.forEach(function (c, i) {
+      if (deck.usable && !deck.usable(i)) return; // empty channel: nothing to tune to
+      var b = document.createElement("button");
+      b.setAttribute("role", "menuitem");
+      b.textContent = String(c.num).padStart(2, "0") + (c.slug ? " " + c.name : "");
+      if (i === chIdx) b.setAttribute("aria-current", "true");
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        closeList();
+        if (i !== chIdx) deck.go(i);
+      });
+      list.appendChild(b);
+    });
+    // just under the channel number, which wraps to two lines on a phone
+    list.style.top = $("osd-ch").getBoundingClientRect().bottom + 12 + "px";
+    list.hidden = false;
+    $("osd-ch").setAttribute("aria-expanded", "true");
+    clearTimeout(padsTimer);
+    (list.querySelector("[aria-current]") || list.firstChild).focus();
+  }
+  function closeList() {
+    $("ch-list").hidden = true;
+    $("osd-ch").setAttribute("aria-expanded", "false");
+    showPads();
+  }
+  function listFocus(d) {
+    var items = Array.prototype.slice.call($("ch-list").children);
+    var i = items.indexOf(document.activeElement) + d;
+    items[Math.max(0, Math.min(items.length - 1, i))].focus();
   }
 
   function skip() {
@@ -168,6 +232,7 @@
   function setMuted(m) {
     muted = m;
     $("osd-mute").classList.toggle("show", muted);
+    $("pad-mute").setAttribute("aria-pressed", muted ? "true" : "false");
     $("catcher").setAttribute("aria-label", muted ? "Turn on sound and show TV controls" : "Show song credits and TV controls");
   }
   function showVol() {
@@ -189,7 +254,7 @@
   }
   function applyCrt() {
     document.body.classList.toggle("plain", !crt);
-    $("pad-crt").textContent = crt ? "CRT ON" : "CRT OFF";
+    $("pad-crt").setAttribute("aria-pressed", crt ? "true" : "false");
   }
   function toggleCrt() {
     crt = !crt;
@@ -198,6 +263,12 @@
     staticBurst(250);
   }
   applyCrt();
+  function toggleBg() {
+    bg = !bg;
+    try { localStorage.setItem("mtv-bg", bg ? "1" : "0"); } catch (e) {}
+    $("pad-bg").setAttribute("aria-pressed", bg ? "true" : "false");
+  }
+  $("pad-bg").setAttribute("aria-pressed", bg ? "true" : "false");
 
   // ---- local backend: deterministic broadcast over the synced files ----
   function startLocal(manifest0) {
@@ -506,8 +577,10 @@
       // channel up/down: retune to that channel's live broadcast position.
       // Empty channels are skipped; a skip detour ends — changing channel
       // always lands you on the new channel's live clock.
-      ch: function (d) {
-        var j = scanCh(d, function (i) { return libFor(i).length > 0; });
+      ch: function (d) { deck.go(scanCh(d, deck.usable)); },
+      usable: function (i) { return libFor(i).length > 0; },
+      // straight to lineup index j (the channel list)
+      go: function (j) {
         if (j === chIdx) return;
         chIdx = j;
         saveCh();
@@ -519,6 +592,7 @@
         tune();
       },
       toggleMute: function () { active.muted = !active.muted; return active.muted; },
+      paused: function () { return active.paused; },
       vol: function (level) { active.volume = level / 100; },
       pause: function () {
         active.pause();
@@ -612,8 +686,9 @@
                 if (!queue) { player.nextVideo(); return; }
                 cursor++; play();
               },
-              ch: function (d) {
-                var j = scanCh(d, function (i) { return !!LINEUP[i].playlist; });
+              ch: function (d) { deck.go(scanCh(d, deck.usable)); },
+              usable: function (i) { return !!LINEUP[i].playlist; },
+              go: function (j) {
                 if (j === chIdx) return;
                 chIdx = j;
                 saveCh();
@@ -633,6 +708,7 @@
               // never call it muted; the level is applied at unmute above
               vol: function (level) { if (!player.isMuted()) player.setVolume(level); },
               pause: function () { player.pauseVideo(); },
+              paused: function () { return player.getPlayerState() !== YT.PlayerState.PLAYING; },
               resume: function () { player.playVideo(); },
               fullscreen: function () {
                 if (document.documentElement.requestFullscreen) {
@@ -703,6 +779,7 @@
   if (IOS) { $("pad-voldn").hidden = true; $("pad-volup").hidden = true; }
   $("catcher").addEventListener("click", function () {
     if (!deck) return;
+    if (listOpen()) { closeList(); return; } // a tap outside the list closes it
     if (muted) setMuted(deck.toggleMute());
     showOsd(null);
     // the tap is a user gesture: also kick playback, so a device that refused
@@ -718,16 +795,25 @@
   $("pad-volup").addEventListener("click", function (e) { e.stopPropagation(); volStep(1); showPads(); });
   $("pad-full").addEventListener("click", function (e) { e.stopPropagation(); deck && deck.fullscreen(); });
   $("pad-crt").addEventListener("click", function (e) { e.stopPropagation(); toggleCrt(); showPads(); });
+  $("pad-bg").addEventListener("click", function (e) { e.stopPropagation(); toggleBg(); showPads(); });
+  $("pad-mute").addEventListener("click", function (e) { e.stopPropagation(); if (deck) setMuted(deck.toggleMute()); showPads(); });
+  $("osd-ch").addEventListener("click", function (e) { e.stopPropagation(); if (listOpen()) closeList(); else openList(); });
   $("pad-pip").addEventListener("click", function (e) { e.stopPropagation(); deck && deck.pip && deck.pip(); });
   $("pad-cast").addEventListener("click", function (e) { e.stopPropagation(); deck && deck.cast && deck.cast(); });
   $("catcher").addEventListener("dblclick", function () { deck && deck.fullscreen(); });
   document.addEventListener("keydown", function (e) {
     if (e.altKey || e.ctrlKey || e.metaKey || e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    // channel list: arrows walk it, Enter picks (native button), Esc closes
+    if (listOpen()) {
+      if (e.key === "Escape") { e.preventDefault(); closeList(); $("osd-ch").focus(); return; }
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); listFocus(e.key === "ArrowUp" ? -1 : 1); return; }
+    }
     if (e.key === "ArrowRight") { e.preventDefault(); skip(); }
     if (e.key === "ArrowUp" && LINEUP.length > 1) { e.preventDefault(); chStep(1); }
     if (e.key === "ArrowDown" && LINEUP.length > 1) { e.preventDefault(); chStep(-1); }
     if (e.key.toLowerCase() === "f") { e.preventDefault(); if (deck) deck.fullscreen(); }
     if (e.key.toLowerCase() === "c") { e.preventDefault(); toggleCrt(); }
+    if (e.key.toLowerCase() === "b") { e.preventDefault(); toggleBg(); }
     if (e.key === "-") { e.preventDefault(); volStep(-1); }
     if (e.key === "+" || e.key === "=") { e.preventDefault(); volStep(1); }
     if (e.key.toLowerCase() === "m" && deck) { e.preventDefault(); setMuted(deck.toggleMute()); }
@@ -737,10 +823,25 @@
   // (switched app, TV browser in the background) pauses, coming back rejoins
   // the live broadcast. EXCEPT when the video is detached (PiP / AirPlay) —
   // that's the one case where leaving the page and keeping the stream going
-  // is the whole point
+  // is the whole point — or background play is on (BG pad)
   document.addEventListener("visibilitychange", function () {
     if (!deck) return;
     if (deck.detached && deck.detached()) return;
+    if (bg) {
+      // it kept playing, so it's still on schedule: leave it alone. Only a
+      // browser that paused it anyway (iPhone) needs picking up again
+      if (!document.hidden && deck.paused && deck.paused()) deck.resume(true);
+      return;
+    }
     if (document.hidden) { deck.pause(); } else { deck.resume(true); }
   });
+
+  // media keys and the lock screen / browser media controls. Play rejoins
+  // the live broadcast like coming back to the tab; next is the #remote skip
+  if (MS) {
+    var act = function (name, fn) { try { MS.setActionHandler(name, fn); } catch (e) {} };
+    act("play", function () { if (deck) deck.resume(true); });
+    act("pause", function () { if (deck) deck.pause(); });
+    if (CAN_SKIP) act("nexttrack", skip);
+  }
 })();

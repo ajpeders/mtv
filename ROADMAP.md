@@ -41,6 +41,12 @@ are all live and stable.
   `docker-compose.standalone.yml` runs anywhere on one port; `MTV_SOURCE=files`
   airs a folder of mp4s with subfolders as channels; `sync.sh fetch` downloads
   YouTube playlists into it. Homelab compose unchanged.
+- Remote redesign (2026-10-16): the control strip is pixel-style icons flush
+  to the top-right corner, with a mute pad and a `BG` (play in background)
+  toggle, off by default and remembered per device. Tapping the channel
+  number opens a channel list. Lock screens and browser media controls show
+  `[mtv] Artist – Song` (Media Session), with play/pause and, on `/#remote`,
+  next track.
 
 ## Backlog
 
@@ -59,12 +65,6 @@ cross-service work.
   - **Start here:** `fetch` code, playlist URL format
   - **Do:** Verify `fetch` with a bare playlist id.
   - **Done when:** `fetch` verified with a bare playlist id.
-
-- [ ] **MTV-06 — Now-playing metadata on the audio output** (ready, 2 pts)
-  - **Why:** OS media controls, lock screens, Bluetooth speakers and car displays show nothing (or the page title) while MTV plays, so you can't see what's on without looking at the screen.
-  - **Start here:** `app/mtv.js`, where the lower third is set on each track change
-  - **Do:** Set `navigator.mediaSession.metadata` on every track change with the title `[mtv] <Artist> – <Song>` (artist and album fields filled from the same manifest/mediaDb data as the lower third). Skip quietly when the Media Session API isn't available.
-  - **Done when:** a phone lock screen / Bluetooth device shows `[mtv] Artist – Song` for the current video and updates on the next track, including after a channel change.
 
 ## Considered and deliberately not done
 
@@ -101,6 +101,8 @@ cross-service work.
 
 ## History
 
+- 2026-10-16 — MTV-06 + remote redesign: Media Session metadata and
+  actions, icon strip, mute pad, background play toggle, channel list.
 - 2026-10-16 — MTV-04/05: pixel-M `favicon.svg` linked from the player and
   admin (no more `/favicon.ico` 404s); `.github/workflows/ci.yml` mirrors the
   Forgejo checks so GitHub pull requests show CI too.

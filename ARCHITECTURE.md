@@ -30,7 +30,9 @@ air from the wall clock:
 Consequences worth knowing:
 
 - Every viewer is genuinely in sync, with zero coordination.
-- Nothing runs while nobody is watching; the schedule advances on paper.
+- Nothing runs while nobody is watching; the schedule advances on paper. A
+  hidden tab pauses unless the viewer turned on background play (BG pad), or
+  the video is in PiP / AirPlay.
 - Adding or removing a video reshuffles that channel — everyone jumps. This is
   acceptable because syncs are infrequent.
 - `admin/schedule.py` is the server-side twin of the browser implementation.

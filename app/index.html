@@ -121,7 +121,37 @@
     line-height: 1;
     text-transform: uppercase;
     text-shadow: 0 0 8px var(--phosphor-dim), 2px 2px 0 #000;
+    /* it's a <button>: undo the browser's button look */
+    background: none; border: 0; padding: 0;
+    font-family: inherit; color: inherit; text-align: left;
   }
+  /* while the remote is up, tapping the channel number opens the list */
+  #osd-ch.tap { pointer-events: auto; cursor: pointer; z-index: 1; }
+  #osd-ch.tap::after { content: " ▾"; font-size: .6em; vertical-align: middle; }
+  #osd-ch:focus-visible { outline: 1px solid var(--phosphor); outline-offset: 4px; }
+  #ch-list {
+    position: fixed;
+    left: 5vw;
+    min-width: min(260px, 90vw); max-width: 90vw;
+    max-height: 60vh; overflow-y: auto;
+    display: flex; flex-direction: column;
+    padding: 3px;
+    background: #000c;
+    border: 1px solid var(--phosphor-dim);
+  }
+  #ch-list button {
+    font-family: "VT323", monospace;
+    font-size: clamp(20px, 2.8vmin, 32px);
+    min-height: 44px;
+    padding: 4px 12px 4px 30px;
+    text-align: left; text-transform: uppercase;
+    color: #f5f5ed; background: transparent; border: 0;
+    cursor: pointer;
+    text-shadow: 1px 2px #000;
+  }
+  #ch-list button[aria-current] { color: var(--phosphor); }
+  #ch-list button[aria-current]::before { content: "▶"; position: absolute; margin-left: -20px; }
+  #ch-list button:hover, #ch-list button:focus-visible { background: #ffffff18; outline: 0; }
   #osd-track {
     left: max(6vw, env(safe-area-inset-left));
     bottom: max(8vh, calc(env(safe-area-inset-bottom) + 20px));
@@ -186,8 +216,8 @@
     overflow-wrap: anywhere;
   }
   #osd-mute {
-    top: max(5vh, env(safe-area-inset-top));
-    right: 5vw;
+    position: static;
+    margin-right: 5vw;
     max-width: 25vw;
     text-align: right;
     font-size: clamp(15px, 2vmin, 24px);
@@ -239,38 +269,56 @@
     cursor: default;
   }
   #catcher:focus-visible { outline: 1px solid var(--phosphor-dim); outline-offset: -8px; }
-  #pads {
+  /* top-right column: the remote flush to the top edge, mute notice below */
+  #top-right {
     position: fixed;
-    top: max(16vh, calc(env(safe-area-inset-top) + 64px));
-    right: 5vw;
-    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px;
-    max-width: 90vw;
-    padding: 3px;
-    background: #0009;
-    opacity: 0;
+    top: env(safe-area-inset-top, 0px);
+    right: env(safe-area-inset-right, 0px);
+    display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+    max-width: 100vw;
     pointer-events: none;
+  }
+  #pads {
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px;
+    padding: 3px;
+    background: #000b;
+    border: solid var(--phosphor-dim);
+    border-width: 0 0 1px 1px;
+    opacity: 0;
     transition: opacity .4s ease;
   }
   #pads.show { opacity: 1; pointer-events: auto; }
   #pads button {
-    font-family: "VT323", monospace;
-    font-size: clamp(18px, 2.4vmin, 28px);
-    min-height: 44px;
+    display: grid; place-items: center;
+    min-width: 44px; min-height: 44px;
+    padding: 8px;
     color: #f5f5ed;
     background: transparent;
     border: 0;
-    padding: 6px 10px;
     cursor: pointer;
-    text-shadow: 1px 2px #000;
+  }
+  #pads svg {
+    width: clamp(22px, 2.8vmin, 32px); height: clamp(22px, 2.8vmin, 32px);
+    fill: currentColor;
+    shape-rendering: crispEdges;
+    filter: drop-shadow(1px 2px 0 #000);
   }
   #pads button:hover, #pads button:active { color: var(--phosphor); background: #ffffff12; }
   #pads button:focus-visible { outline: 1px solid var(--phosphor); outline-offset: -2px; }
+  /* toggles: CRT and BG dim when off; mute swaps speaker waves for an X */
+  #pad-crt[aria-pressed="false"] svg, #pad-bg[aria-pressed="false"] svg { opacity: .4; }
+  #pad-bg[aria-pressed="true"] { color: var(--phosphor); }
+  #pad-mute[aria-pressed="true"] .waves, #pad-mute[aria-pressed="false"] .x { display: none; }
   [hidden] { display: none !important; }
   @media (max-width: 600px) {
     #osd-track { left: 6vw; bottom: max(9vh, calc(env(safe-area-inset-bottom) + 20px)); max-width: 71vw; }
     #osd-track::before { height: 3px; margin-bottom: 9px; }
     #osd-mute { font-size: 15px; }
-    #pads button { padding-inline: 9px; }
+    #pads button { padding: 6px; }
+    /* side by side with the channel number: the remote wraps into a
+       five-wide block, the channel name onto a second line */
+    #pads { max-width: 62vw; }
+    #osd-ch { max-width: 30vw; }
   }
   @media (prefers-reduced-motion: reduce) {
     #hum { animation: none; }
@@ -297,29 +345,34 @@
   <div class="layer" id="hum"></div>
   <div class="layer" id="vignette"></div>
 
-  <div class="osd" id="osd-ch"></div>
+  <button class="osd" id="osd-ch" aria-label="channel list" aria-haspopup="true" inert></button>
   <div class="osd" id="osd-track" role="status" aria-live="polite" aria-atomic="true"><span id="track-artist"></span><span id="track-song"></span><span id="track-detail" hidden></span><span id="track-genre" hidden></span></div>
-  <div class="osd" id="osd-mute">MUTED<br>TAP FOR SOUND</div>
   <div class="osd" id="osd-vol" aria-hidden="true">
     <span id="vol-label">VOLUME</span>
     <span id="vol-bar"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
   </div>
 
   <button id="catcher" aria-label="Turn on sound and show TV controls"></button>
-  <div id="pads" aria-label="TV controls" aria-hidden="true" inert>
-    <button id="pad-chup" hidden aria-label="channel up">CH ▲</button>
-    <button id="pad-chdn" hidden aria-label="channel down">CH ▼</button>
-    <button id="pad-skip" aria-label="skip video">SKIP</button>
-    <button id="pad-voldn" aria-label="volume down">VOL −</button>
-    <button id="pad-volup" aria-label="volume up">VOL +</button>
-    <button id="pad-full" aria-label="fullscreen">FULL</button>
-    <button id="pad-crt" aria-label="toggle CRT picture">CRT ON</button>
-    <button id="pad-pip" hidden aria-label="picture in picture">PIP</button>
-    <button id="pad-cast" hidden aria-label="airplay">CAST</button>
+  <div id="ch-list" role="menu" aria-label="channels" hidden></div>
+  <div id="top-right">
+    <div id="pads" aria-label="TV controls" aria-hidden="true" inert>
+      <button id="pad-chup" hidden aria-label="channel up" title="Channel up (↑)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7 4h2v1h1v1h1v1h1v1h1v1h1v2H2V9h1V8h1V7h1V6h1V5h1z"/></svg></button>
+      <button id="pad-chdn" hidden aria-label="channel down" title="Channel down (↓)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5h12v2h-1v1h-1v1h-1v1h-1v1h-1v1H9v1H7v-1H6v-1H5V9H4V8H3V7H2z"/></svg></button>
+      <button id="pad-skip" aria-label="skip video" title="Skip (→)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h1v1h1v1h1v1h1v2H5v1H4v1H3v1H2zM7 4h1v1h1v1h1v1h1v2h-1v1H9v1H8v1H7zM12 4h2v8h-2z"/></svg></button>
+      <button id="pad-mute" aria-label="mute" aria-pressed="true" title="Mute (M)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6h3v4H1zM4 6h1V5h1V4h1v8H6v-1H5v-1H4z"/><path class="waves" d="M9 7h1v2H9zM11 5h1v6h-1zM13 3h1v10h-1z"/><path class="x" d="M9 5h2v2H9zM13 5h2v2h-2zM11 7h2v2h-2zM9 9h2v2H9zM13 9h2v2h-2z"/></svg></button>
+      <button id="pad-voldn" aria-label="volume down" title="Volume down (−)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6h3v4H1zM4 6h1V5h1V4h1v8H6v-1H5v-1H4zM9 7h6v2H9z"/></svg></button>
+      <button id="pad-volup" aria-label="volume up" title="Volume up (+)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 6h3v4H1zM4 6h1V5h1V4h1v8H6v-1H5v-1H4zM9 7h6v2H9zM11 5h2v6h-2z"/></svg></button>
+      <button id="pad-full" aria-label="fullscreen" title="Fullscreen (F)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 1h5v2H3v3H1zM10 1h5v5h-2V3h-3zM1 10h2v3h3v2H1zM13 10h2v5h-5v-2h3z"/></svg></button>
+      <button id="pad-crt" aria-label="CRT picture" aria-pressed="true" title="CRT picture (C)"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M1 3h14v10H1zM2 4v8h12V4z"/><path d="M3 6h10v1H3zM3 9h10v1H3zM3 13h2v2H3zM11 13h2v2h-2z"/></svg></button>
+      <button id="pad-bg" aria-label="play in background" aria-pressed="false" title="Play in background (B)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2h8v1h1v1h1v1h1v5h-2V6h-1V5h-1V4H5v1H4v1H3v4H1V5h1V4h1V3h1zM1 9h4v5H1zM11 9h4v5h-4z"/></svg></button>
+      <button id="pad-pip" hidden aria-label="picture in picture" title="Picture in picture"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="M1 3h14v10H1zM2 4v8h12V4z"/><path d="M8 8h5v3H8z"/></svg></button>
+      <button id="pad-cast" hidden aria-label="airplay" title="AirPlay"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 2h14v9h-3v-1h2V3H2v7h2v1H1zM7 9h2v1h1v1h1v1h1v2H4v-2h1v-1h1v-1h1z"/></svg></button>
+    </div>
+    <div class="osd" id="osd-mute">MUTED<br>TAP FOR SOUND</div>
   </div>
 
   <div id="boot">TUNING…</div>
 
-  <script src="mtv.js?v=11"></script>
+  <script src="mtv.js?v=12"></script>
 </body>
 </html>
