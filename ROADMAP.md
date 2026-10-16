@@ -78,6 +78,12 @@ cross-service work.
   - **Do:** Add a `.github/workflows/ci.yml` running the same sanity checks.
   - **Done when:** GitHub pull requests run the same checks as Forgejo.
 
+- [ ] **MTV-06 — Now-playing metadata on the audio output** (ready, 2 pts)
+  - **Why:** OS media controls, lock screens, Bluetooth speakers and car displays show nothing (or the page title) while MTV plays, so you can't see what's on without looking at the screen.
+  - **Start here:** `app/mtv.js`, where the lower third is set on each track change
+  - **Do:** Set `navigator.mediaSession.metadata` on every track change with the title `[mtv] <Artist> – <Song>` (artist and album fields filled from the same manifest/mediaDb data as the lower third). Skip quietly when the Media Session API isn't available.
+  - **Done when:** a phone lock screen / Bluetooth device shows `[mtv] Artist – Song` for the current video and updates on the next track, including after a channel change.
+
 ## Considered and deliberately not done
 
 - **Restoring the genre channels (2–4).** The single-channel lineup is
