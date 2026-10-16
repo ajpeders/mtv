@@ -132,25 +132,28 @@
   #ch-list {
     position: fixed;
     left: 5vw;
-    min-width: min(260px, 90vw); max-width: 90vw;
+    width: max-content; max-width: 90vw;
     max-height: 60vh; overflow-y: auto;
     display: flex; flex-direction: column;
     padding: 3px;
     background: #000c;
     border: 1px solid var(--phosphor-dim);
   }
+  /* rows: ▶ marker | channel number | name, columns lined up */
   #ch-list button {
+    display: grid; grid-template-columns: 1em 2ch auto; gap: .5em; align-items: center;
     font-family: "VT323", monospace;
     font-size: clamp(20px, 2.8vmin, 32px);
     min-height: 44px;
-    padding: 4px 12px 4px 30px;
+    padding: 2px 16px 2px 8px;
     text-align: left; text-transform: uppercase;
     color: #f5f5ed; background: transparent; border: 0;
     cursor: pointer;
     text-shadow: 1px 2px #000;
   }
-  #ch-list button[aria-current] { color: var(--phosphor); }
-  #ch-list button[aria-current]::before { content: "▶"; position: absolute; margin-left: -20px; }
+  #ch-list .num { color: var(--phosphor-dim); }
+  #ch-list button[aria-current], #ch-list button[aria-current] .num { color: var(--phosphor); }
+  #ch-list button[aria-current] .mark::before { content: "▶"; }
   #ch-list button:hover, #ch-list button:focus-visible { background: #ffffff18; outline: 0; }
   #osd-track {
     left: max(6vw, env(safe-area-inset-left));

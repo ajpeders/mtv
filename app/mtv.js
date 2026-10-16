@@ -194,7 +194,12 @@
       if (deck.usable && !deck.usable(i)) return; // empty channel: nothing to tune to
       var b = document.createElement("button");
       b.setAttribute("role", "menuitem");
-      b.textContent = String(c.num).padStart(2, "0") + (c.slug ? " " + c.name : "");
+      [["mark", ""], ["num", String(c.num).padStart(2, "0")], ["name", c.slug ? c.name : ""]].forEach(function (p) {
+        var span = document.createElement("span");
+        span.className = p[0];
+        span.textContent = p[1];
+        b.appendChild(span);
+      });
       if (i === chIdx) b.setAttribute("aria-current", "true");
       b.addEventListener("click", function (e) {
         e.stopPropagation();
