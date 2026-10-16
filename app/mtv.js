@@ -466,9 +466,13 @@
       active.src = srcOf(it.id);
       active.load();
       if (off > 1) {
+        var asked = Date.now();
         active.addEventListener("loadedmetadata", function seek() {
           active.removeEventListener("loadedmetadata", seek);
-          if (off < active.duration - 2) active.currentTime = off;
+          // the broadcast kept going while the file loaded: seek to where it
+          // is now, not where it was when we asked
+          var live = off + (Date.now() - asked) / 1000;
+          if (live < active.duration - 2) active.currentTime = live;
         });
       }
       kickPlay(active);
@@ -482,8 +486,9 @@
       if (slot.it.id !== currentId) {
         playItem(slot.it, slot.off);
       } else {
-        // same video: nudge only if we've drifted well off the live point
-        if (Math.abs(active.currentTime - slot.off) > 10) active.currentTime = slot.off;
+        // same video: snap back to the live point if we've drifted off it
+        // (a pause, autoplay blocked until a tap); small jitter is left alone
+        if (Math.abs(active.currentTime - slot.off) > 2) active.currentTime = slot.off;
         active.play().catch(function () {});
       }
     }
@@ -616,7 +621,11 @@
         // a detour (skip) must survive app-switching — rejoining the live
         // clock happens only on a fresh page load, never behind your back
         if (fromVisibility && !detour) { refreshLib(tune); return; }
-        if (active.paused) kickPlay(active);
+        if (!active.paused) return;
+        // paused on the live broadcast (autoplay blocked, as in LibreWolf, or
+        // a pause): rejoin it where it is now. tune() is synchronous, so a
+        // tap still counts as the gesture that allows play()
+        if (detour) kickPlay(active); else tune();
       },
       fullscreen: function () {
         // iPhone Safari only allows fullscreen on the <video> itself
