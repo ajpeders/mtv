@@ -42,6 +42,8 @@
   #onair div { font-size: clamp(20px,2.6vmin,28px); line-height: 1.6; }
   #onair .off { color: var(--phosphor-dim); }
   #onair .monitor-channel::after { content: " — "; }
+  #onair .monitor-album { color: var(--phosphor-dim); }
+  #onair .monitor-album::before { content: " · "; }
   a { color: var(--phosphor); }
   @keyframes blink { 50% { opacity: .15; } }
   .blink { animation: blink 1.1s steps(1) infinite; }
@@ -337,6 +339,12 @@
                     title.className = "monitor-track";
                     title.textContent = result.body.now.title;
                     d.appendChild(title);
+                    if (result.body.now.album) {
+                      var album = document.createElement("span");
+                      album.className = "monitor-album";
+                      album.textContent = result.body.now.album;
+                      d.appendChild(album);
+                    }
                     var offset = document.createElement("span");
                     offset.className = "off";
                     offset.textContent = fmtOff(result.body.now.offset);
