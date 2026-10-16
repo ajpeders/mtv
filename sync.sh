@@ -413,6 +413,19 @@ watch_playlists() {
   done
 }
 
+# "Sync now" during a long pass (the one-time HEVC transcode takes hours):
+# republish the manifest right away so channels.json edits and new mediaDb
+# metadata go on air. The trigger itself stays for nap, which then starts a
+# fresh pass. SEEN is touched at the start of each pass, so only a trigger
+# touched during this pass counts, and each touch refreshes once.
+SEEN=/tmp/sync-now.seen
+refresh_if_triggered() {
+  [ -e "$TRIGGER" ] && [ "$TRIGGER" -nt "$SEEN" ] || return 0
+  touch "$SEEN"
+  echo "[sync] sync-now trigger mid-pass, refreshing the manifest"
+  manifest
+}
+
 # sleep SYNC_INTERVAL, or until the admin page touches the trigger
 nap() {
   echo "[sync] sleeping $INTERVAL (or until $TRIGGER appears)"
@@ -444,6 +457,7 @@ fi
 
 while :; do
   ok=1
+  touch "$SEEN"
   lineup > /tmp/lineup.tsv
   while IFS="$TAB" read -r num pl; do
     if yt-dlp --flat-playlist --print "%(id)s	%(title)s	%(channel)s" \
@@ -479,6 +493,7 @@ while :; do
     if [ "$HEVC_TRANSCODE" = 1 ]; then
       while IFS="$TAB" read -r id _rest; do
         [ -n "$id" ] || continue
+        refresh_if_triggered
         transcode_one_per_id "$id"
       done < "$UNION"
     fi

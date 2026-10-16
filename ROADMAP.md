@@ -48,12 +48,6 @@ Story points for future items (1/2/3/5/8): 1–2 = mechanical, safe
 unattended; 3 = needs codebase context; 5–8 = design judgment or
 cross-service work.
 
-- [ ] **MTV-01 — .sync-now is ignored during long passes** (ready, 3 pts)
-  - **Why:** The trigger is only read in the sleep between passes, and the one-time HEVC transcode makes a pass take hours, so "Sync now" in the admin page does nothing until it finishes.
-  - **Start here:** sync pass loop, manifest refresh
-  - **Do:** Check the trigger between transcodes and, when set, republish the manifest (cheap) before carrying on, or run manifest refresh on its own short timer independent of downloads.
-  - **Done when:** .sync-now trigger is respected during long passes; `channels.json` edits and new mediaDb metadata no longer wait for the next full pass.
-
 - [ ] **MTV-02 — Verify standalone files mode in a real browser** (ready, 1 pts)
   - **Why:** The 2026-09-30 standalone files mode check was curl-only — no browser verification yet.
   - **Start here:** standalone files mode
@@ -119,6 +113,9 @@ cross-service work.
 
 ## History
 
+- 2026-10-16 — MTV-01: "Sync now" during a long pass (HEVC transcodes)
+  republishes the manifest between transcodes instead of waiting for the pass
+  to end; the trigger still starts a fresh pass afterwards.
 - 2026-09-30 — standalone deploy (`docker-compose.standalone.yml`, `/admin`
   proxied by nginx), files mode (`MTV_SOURCE=files`, `files_manifest.py`) and
   the `sync.sh fetch` playlist downloader, so others can run MTV without the

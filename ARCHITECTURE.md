@@ -83,7 +83,9 @@ Runs forever in `mtv-sync`, one pass per `SYNC_INTERVAL` (default 6h) or when
 4. Transcode each freshly-downloaded file to **HEVC** (libx265, CRF 23,
    AAC stream-copy, `hvc1` tag) in place — see *Codec* below. The H.264 source
    is only overwritten on a clean ffmpeg exit; a crash mid-transcode leaves
-   the file untouched and the next pass retries.
+   the file untouched and the next pass retries. A `.sync-now` touched during
+   the pass republishes the manifest between transcodes; the trigger is left
+   for the next pass to start from.
 5. Prune videos in no playlist — **skipped entirely if any fetch failed**, so a
    transient YouTube error cannot wipe the library.
 6. Publish the manifest again.
