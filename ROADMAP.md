@@ -54,17 +54,7 @@ Story points for future items (1/2/3/5/8): 1–2 = mechanical, safe
 unattended; 3 = needs codebase context; 5–8 = design judgment or
 cross-service work.
 
-- [ ] **MTV-02 — Verify standalone files mode in a real browser** (ready, 1 pts)
-  - **Why:** The 2026-09-30 standalone files mode check was curl-only — no browser verification yet.
-  - **Start here:** standalone files mode
-  - **Do:** Play a subfolder channel with `&`/`#` in a filename in a real browser.
-  - **Done when:** standalone files mode verified in a real browser with subfolder channels containing `&`/`#` in filenames.
-
-- [ ] **MTV-03 — Verify fetch with a bare playlist id** (ready, 1 pts)
-  - **Why:** Only a single-video URL was tested for `fetch` — the playlist URL format hasn't been verified.
-  - **Start here:** `fetch` code, playlist URL format
-  - **Do:** Verify `fetch` with a bare playlist id.
-  - **Done when:** `fetch` verified with a bare playlist id.
+Nothing open right now.
 
 ## Considered and deliberately not done
 
@@ -101,6 +91,11 @@ cross-service work.
 
 ## History
 
+- 2026-10-16 — MTV-02/03 verified. Files mode behind the repo's
+  `nginx.conf` plays subfolder channels with `&`, `#`, `'`, `%` and `?` in
+  folder and file names in a real browser (Chromium via Playwright; not
+  Safari). `sync.sh fetch --into <folder> <bare playlist id>` downloads into the
+  folder, writes the info.json and rebuilds the files manifest.
 - 2026-10-16 — MTV-06 + remote redesign: Media Session metadata and
   actions, icon strip, mute pad, background play toggle, channel list.
 - 2026-10-16 — MTV-04/05: pixel-M `favicon.svg` linked from the player and
