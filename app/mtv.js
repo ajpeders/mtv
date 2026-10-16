@@ -245,7 +245,7 @@
     for (var i = 0; i < segs.length; i++) segs[i].classList.toggle("lit", i < volume / 10);
     $("osd-vol").classList.add("show");
     clearTimeout(volTimer);
-    volTimer = setTimeout(function () { $("osd-vol").classList.remove("show"); }, 2000);
+    volTimer = setTimeout(function () { $("osd-vol").classList.remove("show"); }, 3000);
   }
   // one notch = 10%. Turning it up while muted also unmutes, like a TV; that
   // runs first so the YouTube backend's vol() sees an unmuted player
